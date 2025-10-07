@@ -67,6 +67,16 @@
       "assumptions": [],
       "max_self_triggers": 1,
       "triggers": []
+    },
+    {
+      "id": "adda_4934",
+      "name": "adda",
+      "type": "Actor",
+      "description": "",
+      "tags": [],
+      "assumptions": [],
+      "max_self_triggers": 1,
+      "triggers": []
     }
   ],
   "edges": [
@@ -104,8 +114,22 @@
       "type": "communicate",
       "response_only": false,
       "cardinality": "request-response"
+    },
+    {
+      "source": "adda_4934",
+      "target": "a_53dd",
+      "type": "communicate",
+      "response_only": true,
+      "cardinality": "request-response"
+    },
+    {
+      "source": "adda_4934",
+      "target": "email_tool_8913",
+      "type": "communicate",
+      "response_only": false,
+      "cardinality": "streaming"
     }
   ],
-  "attacker_id": "email_tool_8913",
+  "attacker_id": "another_agent_77cf",
   "victim_id": "car_agent_e9c5"
 }

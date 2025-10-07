@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "./src/threath_analysis_tool"
+    ]
+}
