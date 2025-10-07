@@ -9,7 +9,7 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Dict, List, Literal, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator
 
 # --- Command Pattern Abstract Base Class ---
 
@@ -56,13 +56,18 @@ class Edge(BaseModel):
     response_only: bool = False
     cardinality: Literal["request-response", "streaming"] = "request-response"
 
-    @field_validator('type')
-    def comm_props_only_for_communicate(cls, v, values):
-        # Pydantic v2 style validator access
-        data = values.data
-        if v != 'communicate' and (data.get('response_only') or data.get('cardinality') != 'request-response'):
-            raise ValueError("response_only and cardinality properties are only applicable for 'communicate' edges.")
-        return v
+    @model_validator(mode='after')
+    def check_communication_properties(self) -> 'Edge':
+        """
+        Ensures that properties specific to 'communicate' edges are only used for that type
+        and have default values for other types. This enforces internal model consistency.
+        """
+        if self.type != 'communicate':
+            if self.response_only is not False:
+                raise ValueError("The 'response_only' property is only applicable for 'communicate' edges.")
+            if self.cardinality != 'request-response':
+                raise ValueError("The 'cardinality' property is only applicable for 'communicate' edges.")
+        return self
 
 # --- Analysis Result Models ---
 

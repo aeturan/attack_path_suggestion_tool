@@ -81,8 +81,8 @@ def render_add_node_form():
                 node_id = f"{node_name.replace(' ', '_')}_{str(uuid.uuid4())[:4]}"
                 command = AddNodeCommand(st.session_state.graph, {"id": node_id, "name": node_name, "type": node_type})
                 execute_command(command)
-            except ValidationError as e:
-                st.error(f"Validation Error: {e}")
+            except (ValidationError, ValueError) as e:
+                st.error(f"Error: {e}")
         else:
             st.warning("Node name cannot be empty.")
 
@@ -125,8 +125,8 @@ def render_add_edge_workflow():
                     execute_command(command)
                     st.session_state.edge_creation_source_id = None
                     st.rerun()
-                except ValidationError as e:
-                    st.error(f"Validation Error: {e}")
+                except (ValidationError, ValueError) as e:
+                    st.error(f"Error: {e}")
         if st.button("Cancel"):
             st.session_state.edge_creation_source_id = None
             st.rerun()

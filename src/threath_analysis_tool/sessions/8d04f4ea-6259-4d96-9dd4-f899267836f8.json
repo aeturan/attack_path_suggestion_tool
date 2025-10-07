@@ -1,8 +1,35 @@
 {
   "id": "8d04f4ea-6259-4d96-9dd4-f899267836f8",
   "name": "sdfa",
-  "nodes": [],
-  "edges": [],
+  "nodes": [
+    {
+      "id": "X_40b7",
+      "name": "X",
+      "type": "Actor",
+      "description": "",
+      "tags": [],
+      "assumptions": [],
+      "max_self_triggers": 1,
+      "triggers": []
+    },
+    {
+      "id": "X_datasource_3622",
+      "name": "X_datasource",
+      "type": "Datasource",
+      "description": "",
+      "tags": [],
+      "assumptions": []
+    }
+  ],
+  "edges": [
+    {
+      "source": "X_40b7",
+      "target": "X_datasource_3622",
+      "type": "write",
+      "response_only": false,
+      "cardinality": "request-response"
+    }
+  ],
   "attacker_id": null,
   "victim_id": null
 }

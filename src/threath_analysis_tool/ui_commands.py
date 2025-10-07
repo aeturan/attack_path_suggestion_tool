@@ -47,6 +47,32 @@ class AddEdgeCommand(Command):
     def __init__(self, graph: Graph, edge_data: Dict[str, Any]):
         self.graph = graph
         self.edge_data = edge_data
+
+        # --- CONTEXTUAL VALIDATION ---
+        # Perform validation before creating the Edge object to provide immediate, clear feedback to the user.
+        # This is the correct layer for this logic, as it requires context from the graph.
+        source_node = graph.get_node(edge_data['source'])
+        target_node = graph.get_node(edge_data['target'])
+        edge_type = edge_data['type']
+
+        if not source_node or not target_node:
+            raise ValueError("Edge source or target node not found.")
+
+        source_type = source_node.type
+        target_type = target_node.type
+
+        error_msg = None
+        if edge_type == 'read' and not (source_type == 'Datasource' and target_type == 'Actor'):
+            error_msg = "Invalid 'read' edge: Must be from a Datasource to an Actor."
+        elif edge_type == 'write' and not (source_type == 'Actor' and target_type == 'Datasource'):
+            error_msg = "Invalid 'write' edge: Must be from an Actor to a Datasource."
+        elif edge_type == 'communicate' and not (source_type == 'Actor' and target_type == 'Actor'):
+            error_msg = "Invalid 'communicate' edge: Must be between two Actors."
+        
+        if error_msg:
+            raise ValueError(f"{error_msg} (Attempted: {source_type} -> {target_type})")
+        # --- END VALIDATION ---
+
         self.edge = Edge(**self.edge_data)
 
     def execute(self):
