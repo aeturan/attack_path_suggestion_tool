@@ -26,6 +26,10 @@ def execute_command(command):
 def render_sidebar():
     with st.sidebar:
         st.header("Session Management")
+
+        if 'confirming_delete' not in st.session_state:
+            st.session_state.confirming_delete = False
+
         sessions = get_all_sessions()
         session_names = {s_id: name for s_id, name in sessions.items()}
         selected_session = st.selectbox(
@@ -34,6 +38,7 @@ def render_sidebar():
             index=None, placeholder="Select a graph to load..."
         )
         if selected_session and selected_session != st.session_state.graph.id:
+            st.session_state.confirming_delete = False
             load_session_by_id(selected_session)
             st.rerun()
 
@@ -41,14 +46,32 @@ def render_sidebar():
             new_graph_name = st.text_input("New Graph Name", placeholder="e.g., In-Car Agent System")
             if st.form_submit_button("Create New Graph"):
                 if new_graph_name:
+                    st.session_state.confirming_delete = False
                     create_new_session(new_graph_name)
                     st.rerun()
                 else:
                     st.warning("Please provide a name.")
 
-        if st.session_state.graph.id and st.button("🗑️ Delete Current Graph", use_container_width=True):
-            delete_current_session()
-            st.rerun()
+        if st.session_state.graph.id:
+            if st.button("🗑️ Delete Current Graph", use_container_width=True):
+                st.session_state.confirming_delete = True
+                st.rerun()
+            
+            if st.session_state.confirming_delete:
+                @st.dialog("Confirm Deletion")
+                def show_confirm_dialog():
+                    st.warning(f"Are you sure you want to permanently delete the graph '{st.session_state.graph.name}'?")
+                    col1, col2 = st.columns(2)
+                    if col1.button("Yes, Delete It", use_container_width=True, type="primary"):
+                        delete_current_session()
+                        st.session_state.confirming_delete = False
+                        st.rerun()
+                    if col2.button("Cancel", use_container_width=True):
+                        st.session_state.confirming_delete = False
+                        st.rerun()
+                
+                show_confirm_dialog()
+
 
         st.header("Builder Controls")
         col1, col2 = st.columns(2)
@@ -167,3 +190,4 @@ def render_attack_path_results():
         if st.button(f"Path {i+1}: {path_str}", key=f"path_{i}", use_container_width=True):
             st.session_state.selected_path_index = i
             st.rerun()
+            
