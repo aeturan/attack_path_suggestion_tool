@@ -1,0 +1,71 @@
+{
+  "id": "2b8f6b7a-a437-45b6-83eb-7f9051c42493",
+  "name": "in-car agent",
+  "nodes": [
+    {
+      "id": "car_agent_7a3e",
+      "name": "car agent",
+      "type": "Actor",
+      "triggers": [
+        {
+          "type": "self"
+        },
+        {
+          "type": "datasource",
+          "datasource_id": "email_storage_bb3a"
+        }
+      ]
+    },
+    {
+      "id": "attacker_adb1",
+      "name": "attacker",
+      "type": "Actor",
+      "triggers": []
+    },
+    {
+      "id": "email_storage_bb3a",
+      "name": "email storage",
+      "type": "Datasource"
+    },
+    {
+      "id": "email_tool_9c56",
+      "name": "email tool",
+      "type": "Actor",
+      "triggers": []
+    }
+  ],
+  "edges": [
+    {
+      "source": "car_agent_7a3e",
+      "target": "attacker_adb1",
+      "type": "communicate"
+    },
+    {
+      "source": "attacker_adb1",
+      "target": "car_agent_7a3e",
+      "type": "respond"
+    },
+    {
+      "source": "email_storage_bb3a",
+      "target": "email_tool_9c56",
+      "type": "read"
+    },
+    {
+      "source": "email_tool_9c56",
+      "target": "car_agent_7a3e",
+      "type": "respond"
+    },
+    {
+      "source": "car_agent_7a3e",
+      "target": "email_tool_9c56",
+      "type": "communicate"
+    },
+    {
+      "source": "attacker_adb1",
+      "target": "email_storage_bb3a",
+      "type": "write"
+    }
+  ],
+  "attacker_id": "attacker_adb1",
+  "victim_id": "car_agent_7a3e"
+}
