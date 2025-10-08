@@ -27,6 +27,13 @@ def render_sidebar():
     with st.sidebar:
         st.header("Session Management")
 
+        # --- Initialize Expander State ---
+        if 'add_expander_state' not in st.session_state:
+            st.session_state.add_expander_state = False
+        if 'manage_expander_state' not in st.session_state:
+            st.session_state.manage_expander_state = False
+        
+        # --- Initialize Other States ---
         if 'confirming_delete' not in st.session_state:
             st.session_state.confirming_delete = False
         if 'node_to_delete' not in st.session_state:
@@ -89,12 +96,12 @@ def render_sidebar():
         for command in reversed(st.session_state.history.undo_stack[-5:]):
             st.caption(f"↩️ {command.description}")
 
-        with st.expander("➕ Add New Element", expanded=False):
+        with st.expander("➕ Add New Element", expanded=st.session_state.add_expander_state):
             render_add_node_form()
             st.divider()
             render_add_edge_workflow()
         
-        with st.expander("✏️ Manage Elements", expanded=True):
+        with st.expander("✏️ Manage Elements", expanded=st.session_state.manage_expander_state):
             render_delete_node_workflow()
             st.divider()
             render_delete_edge_workflow()
@@ -107,6 +114,9 @@ def render_add_node_form():
     node_type = st.radio("Node Type", ["Actor", "Datasource"], horizontal=True, key="add_node_type")
     node_name = st.text_input("Node Name", key="new_node_name")
     if st.button("Add Node"):
+        # Set expander state before executing command
+        st.session_state.add_expander_state = True
+        st.session_state.manage_expander_state = False
         if node_name:
             try:
                 node_id = f"{node_name.replace(' ', '_')}_{str(uuid.uuid4())[:4]}"
@@ -148,6 +158,9 @@ def render_add_edge_workflow():
             edge_type = st.selectbox("Edge Type", ["read", "write", "communicate", "respond"])
             
             if st.button("✓ Add Edge", type="primary"):
+                # Set expander state before executing command
+                st.session_state.add_expander_state = True
+                st.session_state.manage_expander_state = False
                 try:
                     command = AddEdgeCommand(st.session_state.graph, {"source": source_node.id, "target": target_id, "type": edge_type})
                     execute_command(command)
@@ -169,6 +182,9 @@ def render_delete_node_workflow():
     node_id_to_delete = st.selectbox("Select Node", [""] + list(node_options.keys()), format_func=lambda x: node_options.get(x, "Choose..."))
     
     if st.button("Delete Node", disabled=not node_id_to_delete):
+        # Set expander state before showing dialog
+        st.session_state.add_expander_state = False
+        st.session_state.manage_expander_state = True
         st.session_state.node_to_delete = st.session_state.graph.get_node(node_id_to_delete)
         st.rerun()
 
@@ -205,6 +221,9 @@ def render_delete_edge_workflow():
     edge_key = st.selectbox("Select Edge", list(edge_options.keys()), format_func=lambda x: edge_options.get(x, "Choose..."), index=None, placeholder="Choose an edge...")
 
     if st.button("Delete Edge", disabled=not edge_key):
+        # Set expander state before executing command
+        st.session_state.add_expander_state = False
+        st.session_state.manage_expander_state = True
         source_id, target_id = edge_key
         command = DeleteEdgeCommand(st.session_state.graph, source_id, target_id)
         execute_command(command)
