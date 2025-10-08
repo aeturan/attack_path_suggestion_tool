@@ -29,7 +29,7 @@ def render_sidebar():
 
         # --- Initialize Expander State ---
         if 'add_expander_state' not in st.session_state:
-            st.session_state.add_expander_state = False
+            st.session_state.add_expander_state = True
         if 'manage_expander_state' not in st.session_state:
             st.session_state.manage_expander_state = False
         
