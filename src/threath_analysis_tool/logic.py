@@ -130,12 +130,12 @@ class GraphAnalysis:
             elif node.id in highlight_nodes:
                 lines.append(f"    style {node.id} fill:#caffbf,stroke:#80ed99,stroke-width:2px")
 
-        # Define arrow styles for clarity and to match our new model.
+        # Use shorter aliases for graph readability.
         arrow_styles = {
             "write": "-- write -->",
             "read": "-- read -->",
-            "communicate": "-- communicate -->",
-            "respond": "-. respond .->",
+            "communicate": "-- comm -->",
+            "respond": "-. resp .->",
         }
 
         for i, edge in enumerate(self.graph.edges):
