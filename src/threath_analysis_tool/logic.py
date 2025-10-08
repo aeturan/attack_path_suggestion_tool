@@ -48,16 +48,21 @@ class GreedyDFSStrategy(PathfindingStrategy):
             for next_actor_id in possible_next_actors:
                 # This logic will need to be updated in Phase 2 to safely handle self-loops.
                 # For now, the existing `visited` check will prevent infinite loops.
-                if next_actor_id in visited:
+                is_self_loop = next_actor_id == current_actor_id
+                if not is_self_loop and next_actor_id in visited:
                     continue
                 
-                visited.add(next_actor_id)
+                # Simple protection against immediate re-entry for self-loops
+                if is_self_loop and len(current_path) > 0 and current_path[-1].actor_id == current_actor_id:
+                     continue
+                
+                new_visited = visited.copy()
+                new_visited.add(next_actor_id)
                 new_steps = [
                     PathStep(actor_id=current_actor_id, action="poison", target_id=next_actor_id, step_type="poison"),
                     PathStep(actor_id=current_actor_id, action="trigger", target_id=next_actor_id, step_type="trigger")
                 ]
-                dfs(next_actor_id, current_path + new_steps, visited)
-                visited.remove(next_actor_id)
+                dfs(next_actor_id, current_path + new_steps, new_visited)
 
         dfs(graph.attacker_id, [], {graph.attacker_id})
         return solutions
@@ -79,15 +84,32 @@ class GraphAnalysis:
         self._build_internal_graphs()
 
     def _build_internal_graphs(self):
-        # Add implicit self-triggers from node properties first
+        # --- Build Trigger Graph ---
+        # 1. From Actor properties (self-trigger)
         for node in self.graph.nodes:
             if node.type == 'Actor' and node.can_self_trigger:
                 self.trigger_graph.setdefault(node.id, []).append(node.id)
 
-        # Then, process the explicit edges on the graph
+        # 2. From explicit 'communicate' edges
         for edge in self.graph.edges:
             if edge.type == "communicate":
                 self.trigger_graph.setdefault(edge.source, []).append(edge.target)
+        
+        # 3. From implicit 'datasource change' triggers
+        writers_by_ds: Dict[str, List[str]] = {}
+        for edge in self.graph.edges:
+            if edge.type == "write":
+                writers_by_ds.setdefault(edge.target, []).append(edge.source)
+        
+        for node in self.graph.nodes:
+            if node.type == 'Actor':
+                for watched_ds_id in node.watches_datasources:
+                    for writer_actor_id in writers_by_ds.get(watched_ds_id, []):
+                        # This means 'writer_actor_id' can trigger 'node.id'
+                        self.trigger_graph.setdefault(writer_actor_id, []).append(node.id)
+
+        # --- Build Reverse Poison Graph ---
+        for edge in self.graph.edges:
             if edge.type == "write":
                 self.reverse_poison_graph.setdefault(edge.target, []).append(edge.source)
             elif edge.type == "read":
@@ -130,22 +152,20 @@ class GraphAnalysis:
         for node in self.graph.nodes:
             shape_start, shape_end = ("([", "])") if node.type == 'Actor' else ("[(", ")]")
             
-            # Add an indicator to the label for self-triggering actors
             label = node.name
             if node.type == 'Actor' and node.can_self_trigger:
                 label = f"{node.name} 🔄"
             
             lines.append(f'    {node.id}{shape_start}"{label}"{shape_end}')
             
-            # Apply styling with a clear priority
             if node.id == self.graph.attacker_id:
                 lines.append(f"    style {node.id} fill:#ffadad,stroke:#ff5959,stroke-width:2px")
             elif node.id == self.graph.victim_id:
                 lines.append(f"    style {node.id} fill:#ffd6a5,stroke:#ff9f43,stroke-width:2px")
             elif node.id in highlight_nodes:
                 lines.append(f"    style {node.id} fill:#caffbf,stroke:#80ed99,stroke-width:2px")
+            # The user requested to remove the special border for self-triggering actors.
 
-        # Use shorter aliases for graph readability.
         arrow_styles = {
             "write": "-- write -->",
             "read": "-- read -->",

@@ -41,6 +41,7 @@ class Node(BaseModel):
 class Actor(Node):
     type: Literal["Actor"] = "Actor"
     can_self_trigger: bool = False
+    watches_datasources: List[str] = Field(default_factory=list, description="A list of Datasource IDs that will trigger this actor upon being written to.")
 
 class Datasource(Node):
     type: Literal["Datasource"] = "Datasource"
