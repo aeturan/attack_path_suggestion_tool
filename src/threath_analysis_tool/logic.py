@@ -78,7 +78,8 @@ class GraphAnalysis:
 
     def _build_internal_graphs(self):
         for edge in self.graph.edges:
-            if edge.type == "communicate" and not edge.response_only:
+            # The logic is now simpler: only 'communicate' edges can initiate a trigger.
+            if edge.type == "communicate":
                 self.trigger_graph.setdefault(edge.source, []).append(edge.target)
             if edge.type == "write":
                 self.reverse_poison_graph.setdefault(edge.target, []).append(edge.source)
@@ -129,8 +130,16 @@ class GraphAnalysis:
             elif node.id in highlight_nodes:
                 lines.append(f"    style {node.id} fill:#caffbf,stroke:#80ed99,stroke-width:2px")
 
+        # Define arrow styles for clarity and to match our new model.
+        arrow_styles = {
+            "write": "-- write -->",
+            "read": "<-- read ---",
+            "communicate": "-- communicate -->",
+            "respond": "-. respond .->",
+        }
+
         for i, edge in enumerate(self.graph.edges):
-            arrow = "-- write -->" if edge.type == "write" else "<-- read ---" if edge.type == "read" else "-. communicate .->"
+            arrow = arrow_styles.get(edge.type, "-->")
             lines.append(f"    {edge.source} {arrow} {edge.target}")
             if tuple(sorted((edge.source, edge.target))) in highlight_edges:
                 lines.append(f"    linkStyle {i} stroke:#80ed99,stroke-width:4px")

@@ -136,15 +136,12 @@ def render_add_edge_workflow():
             format_func=lambda x: target_options.get(x, "Choose..."), index=0
         )
         if target_id:
-            edge_type = st.selectbox("Edge Type", ["read", "write", "communicate"])
-            comm_props = {}
-            if edge_type == "communicate":
-                comm_props['response_only'] = st.checkbox("Response-only trigger?")
-                comm_props['cardinality'] = st.radio("Cardinality", ["request-response", "streaming"], horizontal=True)
-
+            # The UI is now simpler and more direct.
+            edge_type = st.selectbox("Edge Type", ["read", "write", "communicate", "respond"])
+            
             if st.button("✓ Add Edge", type="primary"):
                 try:
-                    command = AddEdgeCommand(st.session_state.graph, {"source": source_node.id, "target": target_id, "type": edge_type, **comm_props})
+                    command = AddEdgeCommand(st.session_state.graph, {"source": source_node.id, "target": target_id, "type": edge_type})
                     execute_command(command)
                     st.session_state.edge_creation_source_id = None
                     st.rerun()
@@ -190,4 +187,3 @@ def render_attack_path_results():
         if st.button(f"Path {i+1}: {path_str}", key=f"path_{i}", use_container_width=True):
             st.session_state.selected_path_index = i
             st.rerun()
-            

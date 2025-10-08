@@ -9,7 +9,7 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Dict, List, Literal, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 # --- Command Pattern Abstract Base Class ---
 
@@ -52,22 +52,10 @@ class Datasource(Node):
 class Edge(BaseModel):
     source: str
     target: str
-    type: Literal["read", "write", "communicate"]
-    response_only: bool = False
-    cardinality: Literal["request-response", "streaming"] = "request-response"
-
-    @model_validator(mode='after')
-    def check_communication_properties(self) -> 'Edge':
-        """
-        Ensures that properties specific to 'communicate' edges are only used for that type
-        and have default values for other types. This enforces internal model consistency.
-        """
-        if self.type != 'communicate':
-            if self.response_only is not False:
-                raise ValueError("The 'response_only' property is only applicable for 'communicate' edges.")
-            if self.cardinality != 'request-response':
-                raise ValueError("The 'cardinality' property is only applicable for 'communicate' edges.")
-        return self
+    # The 'type' is now more explicit, removing the need for boolean flags.
+    # 'communicate' is an initiating action.
+    # 'respond' is a non-initiating, reply-only action.
+    type: Literal["read", "write", "communicate", "respond"]
 
 # --- Analysis Result Models ---
 
