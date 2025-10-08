@@ -43,8 +43,7 @@ class Node(BaseModel):
 
 class Actor(Node):
     type: Literal["Actor"] = "Actor"
-    max_self_triggers: int = Field(default=1, ge=0)
-    triggers: List[Dict[str, str]] = []
+    can_self_trigger: bool = False
 
 class Datasource(Node):
     type: Literal["Datasource"] = "Datasource"

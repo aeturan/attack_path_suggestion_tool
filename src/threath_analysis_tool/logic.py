@@ -46,7 +46,9 @@ class GreedyDFSStrategy(PathfindingStrategy):
                 key=lambda actor_id: trigger_distances.get(actor_id, float('inf'))
             )
             for next_actor_id in possible_next_actors:
-                if next_actor_id in visited or poison_distances.get(next_actor_id, float('inf')) == float('inf'):
+                # This logic will need to be updated in Phase 2 to safely handle self-loops.
+                # For now, the existing `visited` check will prevent infinite loops.
+                if next_actor_id in visited:
                     continue
                 
                 visited.add(next_actor_id)
@@ -77,8 +79,13 @@ class GraphAnalysis:
         self._build_internal_graphs()
 
     def _build_internal_graphs(self):
+        # Add implicit self-triggers from node properties first
+        for node in self.graph.nodes:
+            if node.type == 'Actor' and node.can_self_trigger:
+                self.trigger_graph.setdefault(node.id, []).append(node.id)
+
+        # Then, process the explicit edges on the graph
         for edge in self.graph.edges:
-            # The logic is now simpler: only 'communicate' edges can initiate a trigger.
             if edge.type == "communicate":
                 self.trigger_graph.setdefault(edge.source, []).append(edge.target)
             if edge.type == "write":
@@ -122,7 +129,15 @@ class GraphAnalysis:
 
         for node in self.graph.nodes:
             shape_start, shape_end = ("([", "])") if node.type == 'Actor' else ("[(", ")]")
-            lines.append(f'    {node.id}{shape_start}"{node.name}"{shape_end}')
+            
+            # Add an indicator to the label for self-triggering actors
+            label = node.name
+            if node.type == 'Actor' and node.can_self_trigger:
+                label = f"{node.name} 🔄"
+            
+            lines.append(f'    {node.id}{shape_start}"{label}"{shape_end}')
+            
+            # Apply styling with a clear priority
             if node.id == self.graph.attacker_id:
                 lines.append(f"    style {node.id} fill:#ffadad,stroke:#ff5959,stroke-width:2px")
             elif node.id == self.graph.victim_id:
