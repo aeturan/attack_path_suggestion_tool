@@ -133,7 +133,7 @@ class GraphAnalysis:
         # Define arrow styles for clarity and to match our new model.
         arrow_styles = {
             "write": "-- write -->",
-            "read": "<-- read ---",
+            "read": "-- read -->",
             "communicate": "-- communicate -->",
             "respond": "-. respond .->",
         }
