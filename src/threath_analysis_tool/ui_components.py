@@ -95,7 +95,6 @@ def render_sidebar():
         for command in reversed(st.session_state.history.undo_stack[-5:]):
             st.caption(f"↩️ {command.description}")
         
-        # Correctly render content inside the expanders
         with st.expander("➕ Add New Element", expanded=st.session_state.add_expander_state):
             render_add_node_form()
             st.divider()
@@ -114,10 +113,14 @@ def render_add_node_form():
     node_type = st.radio("Node Type", ["Actor", "Datasource"], horizontal=True, key="add_node_type")
     node_name = st.text_input("Node Name", key="new_node_name")
 
-    can_self_trigger = False
+    has_self_trigger = False
     watched_ds_ids = []
     if node_type == 'Actor':
-        can_self_trigger = st.checkbox("Can self-trigger?", help="Allows the actor to initiate actions on its own.")
+        st.markdown("---")
+        st.caption("Actor Triggers")
+        st.caption("An Actor can be triggered in three ways: by itself (`self-trigger`), by a change to a datasource it `watches`, or automatically by an incoming `communicate` or `respond` edge.")
+        
+        has_self_trigger = st.checkbox("Can self-trigger?", help="Allows the actor to initiate actions on its own.")
         
         datasource_options = {
             node.id: node.name 
@@ -131,19 +134,18 @@ def render_add_node_form():
                 format_func=lambda ds_id: datasource_options[ds_id],
                 help="This actor will be triggered if an actor writes to any of the selected datasources."
             )
-
+    
     if st.button("Add Node"):
-        st.session_state.add_expander_state = True # Keep this menu open after action
+        st.session_state.add_expander_state = True
         if node_name:
             try:
                 node_data = {
                     "id": f"{node_name.replace(' ', '_')}_{str(uuid.uuid4())[:4]}",
                     "name": node_name,
                     "type": node_type,
+                    "has_self_trigger": has_self_trigger,
+                    "watches_datasources": watched_ds_ids,
                 }
-                if node_type == 'Actor':
-                    node_data['can_self_trigger'] = can_self_trigger
-                    node_data['watches_datasources'] = watched_ds_ids
                 
                 command = AddNodeCommand(st.session_state.graph, node_data)
                 execute_command(command)
@@ -185,8 +187,11 @@ def render_add_edge_workflow():
         if target_id:
             edge_type = st.selectbox("Edge Type", ["read", "write", "communicate", "respond"])
             
+            if edge_type in ["communicate", "respond"]:
+                st.info(f"Note: '{edge_type}' edges automatically create a trigger on the target actor.")
+            
             if st.button("✓ Add Edge", type="primary"):
-                st.session_state.add_expander_state = True # Keep this menu open after action
+                st.session_state.add_expander_state = True
                 try:
                     command = AddEdgeCommand(st.session_state.graph, {"source": source_node.id, "target": target_id, "type": edge_type})
                     execute_command(command)
@@ -208,7 +213,7 @@ def render_delete_node_workflow():
     node_id_to_delete = st.selectbox("Select Node", [""] + list(node_options.keys()), format_func=lambda x: node_options.get(x, "Choose..."))
     
     if st.button("Delete Node", disabled=not node_id_to_delete):
-        st.session_state.manage_expander_state = True # Keep this menu open after action
+        st.session_state.manage_expander_state = True
         st.session_state.node_to_delete = st.session_state.graph.get_node(node_id_to_delete)
         st.rerun()
 
@@ -245,7 +250,7 @@ def render_delete_edge_workflow():
     edge_key = st.selectbox("Select Edge", list(edge_options.keys()), format_func=lambda x: edge_options.get(x, "Choose..."), index=None, placeholder="Choose an edge...")
 
     if st.button("Delete Edge", disabled=not edge_key):
-        st.session_state.manage_expander_state = True # Keep this menu open after action
+        st.session_state.manage_expander_state = True
         source_id, target_id = edge_key
         command = DeleteEdgeCommand(st.session_state.graph, source_id, target_id)
         execute_command(command)
