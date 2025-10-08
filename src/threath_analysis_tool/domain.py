@@ -37,9 +37,6 @@ class Node(BaseModel):
     id: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
     type: Literal["Actor", "Datasource"]
-    description: str = ""
-    tags: List[str] = []
-    assumptions: List[str] = []
 
 class Actor(Node):
     type: Literal["Actor"] = "Actor"
@@ -51,9 +48,6 @@ class Datasource(Node):
 class Edge(BaseModel):
     source: str
     target: str
-    # The 'type' is now more explicit, removing the need for boolean flags.
-    # 'communicate' is an initiating action.
-    # 'respond' is a non-initiating, reply-only action.
     type: Literal["read", "write", "communicate", "respond"]
 
 # --- Analysis Result Models ---
