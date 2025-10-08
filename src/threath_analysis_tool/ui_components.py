@@ -11,7 +11,7 @@ from session_management import (
     load_session_by_id,
     save_current_session,
 )
-from ui_commands import AddEdgeCommand, AddNodeCommand, SetRoleCommand
+from ui_commands import AddEdgeCommand, AddNodeCommand, DeleteEdgeCommand, DeleteNodeCommand, SetRoleCommand
 
 
 # --- Helper Functions ---
@@ -29,6 +29,8 @@ def render_sidebar():
 
         if 'confirming_delete' not in st.session_state:
             st.session_state.confirming_delete = False
+        if 'node_to_delete' not in st.session_state:
+            st.session_state.node_to_delete = None
 
         sessions = get_all_sessions()
         session_names = {s_id: name for s_id, name in sessions.items()}
@@ -87,16 +89,22 @@ def render_sidebar():
         for command in reversed(st.session_state.history.undo_stack[-5:]):
             st.caption(f"↩️ {command.description}")
 
-        with st.expander("➕ Add New Element", expanded=True):
+        with st.expander("➕ Add New Element", expanded=False):
             render_add_node_form()
             st.divider()
             render_add_edge_workflow()
+        
+        with st.expander("✏️ Manage Elements", expanded=True):
+            render_delete_node_workflow()
+            st.divider()
+            render_delete_edge_workflow()
 
         st.header("Analysis Controls")
         render_analysis_controls()
 
 def render_add_node_form():
-    node_type = st.radio("Node Type", ["Actor", "Datasource"], horizontal=True)
+    st.subheader("Add Node")
+    node_type = st.radio("Node Type", ["Actor", "Datasource"], horizontal=True, key="add_node_type")
     node_name = st.text_input("Node Name", key="new_node_name")
     if st.button("Add Node"):
         if node_name:
@@ -110,8 +118,9 @@ def render_add_node_form():
             st.warning("Node name cannot be empty.")
 
 def render_add_edge_workflow():
+    st.subheader("Add Edge")
     node_options = {node.id: node.name for node in st.session_state.graph.nodes}
-    if not node_options:
+    if not node_options or len(node_options) < 2:
         st.caption("Add at least two nodes to create an edge.")
         return
 
@@ -136,7 +145,6 @@ def render_add_edge_workflow():
             format_func=lambda x: target_options.get(x, "Choose..."), index=0
         )
         if target_id:
-            # The UI is now simpler and more direct.
             edge_type = st.selectbox("Edge Type", ["read", "write", "communicate", "respond"])
             
             if st.button("✓ Add Edge", type="primary"):
@@ -147,9 +155,59 @@ def render_add_edge_workflow():
                     st.rerun()
                 except (ValidationError, ValueError) as e:
                     st.error(f"Error: {e}")
-        if st.button("Cancel"):
+        if st.button("Cancel Add Edge"):
             st.session_state.edge_creation_source_id = None
             st.rerun()
+
+def render_delete_node_workflow():
+    st.subheader("Delete Node")
+    node_options = {node.id: node.name for node in st.session_state.graph.nodes}
+    if not node_options:
+        st.caption("No nodes to delete.")
+        return
+
+    node_id_to_delete = st.selectbox("Select Node", [""] + list(node_options.keys()), format_func=lambda x: node_options.get(x, "Choose..."))
+    
+    if st.button("Delete Node", disabled=not node_id_to_delete):
+        st.session_state.node_to_delete = st.session_state.graph.get_node(node_id_to_delete)
+        st.rerun()
+
+    if st.session_state.node_to_delete:
+        @st.dialog("Confirm Node Deletion")
+        def show_confirm_node_delete():
+            node_name = st.session_state.node_to_delete.name
+            st.warning(f"Delete '{node_name}'? This will also delete all connected edges.")
+            col1, col2 = st.columns(2)
+            if col1.button("Confirm", use_container_width=True, type="primary"):
+                command = DeleteNodeCommand(st.session_state.graph, st.session_state.node_to_delete.id)
+                st.session_state.node_to_delete = None
+                execute_command(command) # This will rerun
+            if col2.button("Cancel", use_container_width=True):
+                st.session_state.node_to_delete = None
+                st.rerun()
+
+        show_confirm_node_delete()
+
+def render_delete_edge_workflow():
+    st.subheader("Delete Edge")
+    edge_options = {}
+    for edge in st.session_state.graph.edges:
+        source_node = st.session_state.graph.get_node(edge.source)
+        target_node = st.session_state.graph.get_node(edge.target)
+        if source_node and target_node:
+            label = f"{source_node.name} → {target_node.name} ({edge.type})"
+            edge_options[(edge.source, edge.target)] = label
+    
+    if not edge_options:
+        st.caption("No edges to delete.")
+        return
+        
+    edge_key = st.selectbox("Select Edge", list(edge_options.keys()), format_func=lambda x: edge_options.get(x, "Choose..."), index=None, placeholder="Choose an edge...")
+
+    if st.button("Delete Edge", disabled=not edge_key):
+        source_id, target_id = edge_key
+        command = DeleteEdgeCommand(st.session_state.graph, source_id, target_id)
+        execute_command(command)
 
 def render_analysis_controls():
     actor_options = {n.id: n.name for n in st.session_state.graph.nodes if n.type == 'Actor'}

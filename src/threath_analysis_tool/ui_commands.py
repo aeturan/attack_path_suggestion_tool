@@ -26,6 +26,7 @@ class DeleteNodeCommand(Command):
     def __init__(self, graph: Graph, node_id: str):
         self.graph = graph
         self.node_id = node_id
+        # Find and store the node and all its connected edges before deletion
         self.node: Node | None = self.graph.get_node(node_id)
         self.deleted_edges = [edge for edge in self.graph.edges if edge.source == node_id or edge.target == node_id]
 
@@ -83,6 +84,30 @@ class AddEdgeCommand(Command):
         source_name = self.graph.get_node(self.edge.source).name
         target_name = self.graph.get_node(self.edge.target).name
         return f"Add Edge ({self.edge.type}): '{source_name}' → '{target_name}'"
+
+class DeleteEdgeCommand(Command):
+    def __init__(self, graph: Graph, source_id: str, target_id: str):
+        self.graph = graph
+        self.source_id = source_id
+        self.target_id = target_id
+        # Find and store the edge object before deletion for the undo operation
+        self.edge: Edge | None = self.graph.get_edge(source_id, target_id)
+
+    def execute(self):
+        if self.edge:
+            self.graph.edges = [e for e in self.graph.edges if not (e.source == self.source_id and e.target == self.target_id)]
+
+    def undo(self):
+        if self.edge:
+            self.graph.edges.append(self.edge)
+
+    @property
+    def description(self) -> str:
+        if not self.edge:
+            return "Delete Edge: (edge not found)"
+        source_name = self.graph.get_node(self.edge.source).name
+        target_name = self.graph.get_node(self.edge.target).name
+        return f"Delete Edge ({self.edge.type}): '{source_name}' → '{target_name}'"
 
 class SetRoleCommand(Command):
     def __init__(self, graph: Graph, role: Literal['attacker', 'victim'], actor_id: str):
