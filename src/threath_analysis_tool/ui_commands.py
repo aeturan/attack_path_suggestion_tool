@@ -65,7 +65,6 @@ class EditNodeCommand(Command):
             for ds_id in self.new_data.get('watches_datasources', []):
                 new_triggers.append(DatasourceTrigger(datasource_id=ds_id))
             
-            # Preserve existing, automatically managed CommunicationTriggers
             for trigger in node.triggers:
                 if isinstance(trigger, CommunicationTrigger):
                     new_triggers.append(trigger)
@@ -180,6 +179,28 @@ class AddEdgeCommand(Command):
         source_name = self.graph.get_node(self.edge.source).name
         target_name = self.graph.get_node(self.edge.target).name
         return f"Add Edge ({self.edge.type}): '{source_name}' → '{target_name}'"
+
+class CreateRespondAndActivatorCommand(Command):
+    """A composite command to add a respond edge and its activating communicate edge."""
+    def __init__(self, graph: Graph, respond_edge_data: Dict[str, Any], comm_edge_data: Dict[str, Any]):
+        # This order is important for the undo state of AddEdgeCommand to be captured correctly.
+        # The state before the first command is the baseline.
+        self.sub_commands = [
+            AddEdgeCommand(graph, comm_edge_data),
+            AddEdgeCommand(graph, respond_edge_data)
+        ]
+
+    def execute(self):
+        for command in self.sub_commands:
+            command.execute()
+
+    def undo(self):
+        for command in reversed(self.sub_commands):
+            command.undo()
+            
+    @property
+    def description(self) -> str:
+        return "Create `respond` edge with activator"
 
 class DeleteEdgeCommand(Command):
     def __init__(self, graph: Graph, source_id: str, target_id: str):

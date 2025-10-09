@@ -15,6 +15,7 @@ from session_management import (
 from ui_commands import (
     AddEdgeCommand,
     AddNodeCommand,
+    CreateRespondAndActivatorCommand,
     DeleteEdgeCommand,
     DeleteNodeCommand,
     EditNodeCommand,
@@ -49,6 +50,11 @@ def render_sidebar():
             st.session_state.node_to_delete = None
         if "managed_node_id" not in st.session_state:
             st.session_state.managed_node_id = None
+        if "show_respond_dialog" not in st.session_state:
+            st.session_state.show_respond_dialog = False
+        if "respond_dialog_data" not in st.session_state:
+            st.session_state.respond_dialog_data = None
+
 
         sessions = get_all_sessions()
         session_names = {s_id: name for s_id, name in sessions.items()}
@@ -134,7 +140,6 @@ def render_sidebar():
         st.header("Analysis Controls")
         render_analysis_controls()
         
-        # --- About the Model Section ---
         st.markdown("---")
         with st.expander("About the Attack Model", expanded=st.session_state.about_expander_state):
             render_about_model()
@@ -233,27 +238,64 @@ def render_add_edge_workflow():
             edge_type = st.selectbox(
                 "Edge Type", ["read", "write", "communicate", "respond"]
             )
-
-            if edge_type in ["communicate", "respond"]:
-                st.info(
-                    f"Note: '{edge_type}' edges automatically create a trigger on the target actor."
-                )
-
+            
             if st.button("✓ Add Edge", type="primary"):
                 st.session_state.add_expander_state = True
-                try:
-                    command = AddEdgeCommand(
-                        st.session_state.graph,
-                        {"source": source_node.id, "target": target_id, "type": edge_type},
-                    )
-                    execute_command(command)
-                    st.session_state.edge_creation_source_id = None
-                    st.rerun()
-                except (ValidationError, ValueError) as e:
-                    st.error(f"Error: {e}")
+                
+                is_special_respond_case = False
+                if edge_type == "respond":
+                    inverse_edge = st.session_state.graph.get_edge(target_id, source_node.id)
+                    if not (inverse_edge and inverse_edge.type == "communicate"):
+                        st.session_state.show_respond_dialog = True
+                        st.session_state.respond_dialog_data = {
+                            "source_id": source_node.id, "target_id": target_id
+                        }
+                        is_special_respond_case = True
+                        st.rerun()
+
+                if not is_special_respond_case:
+                    try:
+                        command = AddEdgeCommand(
+                            st.session_state.graph,
+                            {"source": source_node.id, "target": target_id, "type": edge_type},
+                        )
+                        execute_command(command)
+                        st.session_state.edge_creation_source_id = None
+                        st.rerun()
+                    except (ValidationError, ValueError) as e:
+                        st.error(f"Error: {e}")
+
         if st.button("Cancel Add Edge"):
             st.session_state.edge_creation_source_id = None
             st.rerun()
+    
+    if st.session_state.show_respond_dialog:
+        @st.dialog("Create Activator Edge?")
+        def show_respond_activator_dialog():
+            data = st.session_state.respond_dialog_data
+            source_name = st.session_state.graph.get_node(data['source_id']).name
+            target_name = st.session_state.graph.get_node(data['target_id']).name
+            
+            st.warning(f"A `respond` edge from **{source_name}** to **{target_name}** requires an activating `communicate` edge from **{target_name}** to **{source_name}**.")
+            st.write("Do you want to create this missing `communicate` edge as well?")
+
+            col1, col2 = st.columns(2)
+            if col1.button("Yes, Create Both", use_container_width=True, type="primary"):
+                respond_edge_data = {"source": data['source_id'], "target": data['target_id'], "type": "respond"}
+                comm_edge_data = {"source": data['target_id'], "target": data['source_id'], "type": "communicate"}
+                command = CreateRespondAndActivatorCommand(st.session_state.graph, respond_edge_data, comm_edge_data)
+                
+                st.session_state.show_respond_dialog = False
+                st.session_state.respond_dialog_data = None
+                st.session_state.edge_creation_source_id = None
+                execute_command(command)
+
+            if col2.button("Cancel", use_container_width=True):
+                st.session_state.show_respond_dialog = False
+                st.session_state.respond_dialog_data = None
+                st.rerun()
+        
+        show_respond_activator_dialog()
 
 
 def render_manage_node_workflow():
