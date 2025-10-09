@@ -41,6 +41,8 @@ def render_sidebar():
             st.session_state.add_expander_state = True
         if "manage_expander_state" not in st.session_state:
             st.session_state.manage_expander_state = False
+        if "about_expander_state" not in st.session_state:
+            st.session_state.about_expander_state = False
         if "confirming_delete" not in st.session_state:
             st.session_state.confirming_delete = False
         if "node_to_delete" not in st.session_state:
@@ -131,6 +133,11 @@ def render_sidebar():
 
         st.header("Analysis Controls")
         render_analysis_controls()
+        
+        # --- About the Model Section ---
+        st.markdown("---")
+        with st.expander("About the Attack Model", expanded=st.session_state.about_expander_state):
+            render_about_model()
 
 
 def render_add_node_form():
@@ -257,19 +264,19 @@ def render_manage_node_workflow():
         return
 
     def on_change_managed_node():
-        st.session_state.node_to_delete = None # Ensure delete confirmation is reset
+        st.session_state.node_to_delete = None
 
     selected_id = st.selectbox(
-        "Select Node", 
-        options=[""] + list(node_options.keys()), 
+        "Select Node",
+        options=[""] + list(node_options.keys()),
         format_func=lambda x: node_options.get(x, "Choose..."),
         key="managed_node_id",
-        on_change=on_change_managed_node
+        on_change=on_change_managed_node,
     )
 
     if selected_id:
         node = st.session_state.graph.get_node(selected_id)
-        
+
         st.markdown("---")
         new_name = st.text_input("Edit Name", value=node.name)
 
@@ -277,16 +284,27 @@ def render_manage_node_workflow():
         watched_ds_ids = []
         if isinstance(node, Actor):
             st.caption("Edit Triggers")
-            has_self_trigger = st.checkbox("Can self-trigger?", value=any(isinstance(t, SelfTrigger) for t in node.triggers))
-            
-            datasource_options = {n.id: n.name for n in st.session_state.graph.nodes if n.type == "Datasource"}
+            has_self_trigger = st.checkbox(
+                "Can self-trigger?",
+                value=any(isinstance(t, SelfTrigger) for t in node.triggers),
+            )
+
+            datasource_options = {
+                n.id: n.name
+                for n in st.session_state.graph.nodes
+                if n.type == "Datasource"
+            }
             if datasource_options:
-                default_watched = [t.datasource_id for t in node.triggers if isinstance(t, DatasourceTrigger)]
+                default_watched = [
+                    t.datasource_id
+                    for t in node.triggers
+                    if isinstance(t, DatasourceTrigger)
+                ]
                 watched_ds_ids = st.multiselect(
-                    "Watches Datasources", 
+                    "Watches Datasources",
                     options=list(datasource_options.keys()),
                     format_func=lambda ds_id: datasource_options[ds_id],
-                    default=default_watched
+                    default=default_watched,
                 )
 
         col1, col2 = st.columns(2)
@@ -306,13 +324,16 @@ def render_manage_node_workflow():
             st.rerun()
 
     if st.session_state.node_to_delete:
+
         @st.dialog("Confirm Node Deletion")
         def show_confirm_node_delete():
             node_name = st.session_state.node_to_delete.name
             st.warning(f"Delete '{node_name}'? This will also delete all connected edges.")
             c1, c2 = st.columns(2)
             if c1.button("Confirm", use_container_width=True, type="primary"):
-                command = DeleteNodeCommand(st.session_state.graph, st.session_state.node_to_delete.id)
+                command = DeleteNodeCommand(
+                    st.session_state.graph, st.session_state.node_to_delete.id
+                )
                 st.session_state.node_to_delete = None
                 st.session_state.managed_node_id = ""
                 execute_command(command)
@@ -332,12 +353,18 @@ def render_delete_edge_workflow():
         if source_node and target_node:
             label = f"{source_node.name} → {target_node.name} ({edge.type})"
             edge_options[(edge.source, edge.target)] = label
-    
+
     if not edge_options:
         st.caption("No edges to delete.")
         return
-        
-    edge_key = st.selectbox("Select Edge", list(edge_options.keys()), format_func=lambda x: edge_options.get(x, "Choose..."), index=None, placeholder="Choose an edge...")
+
+    edge_key = st.selectbox(
+        "Select Edge",
+        list(edge_options.keys()),
+        format_func=lambda x: edge_options.get(x, "Choose..."),
+        index=None,
+        placeholder="Choose an edge...",
+    )
 
     if st.button("Delete Edge", disabled=not edge_key):
         st.session_state.manage_expander_state = True
@@ -345,26 +372,39 @@ def render_delete_edge_workflow():
         command = DeleteEdgeCommand(st.session_state.graph, source_id, target_id)
         execute_command(command)
 
+
 def render_analysis_controls():
-    actor_options = {n.id: n.name for n in st.session_state.graph.nodes if n.type == 'Actor'}
+    actor_options = {
+        n.id: n.name for n in st.session_state.graph.nodes if n.type == "Actor"
+    }
     if not actor_options:
         st.caption("Add actors to run an analysis.")
         return
 
-    attacker_id = st.selectbox("Attacker", actor_options.keys(), format_func=actor_options.get, index=None)
+    attacker_id = st.selectbox(
+        "Attacker", actor_options.keys(), format_func=actor_options.get, index=None
+    )
     if attacker_id and attacker_id != st.session_state.graph.attacker_id:
-        execute_command(SetRoleCommand(st.session_state.graph, 'attacker', attacker_id))
+        execute_command(SetRoleCommand(st.session_state.graph, "attacker", attacker_id))
 
-    victim_id = st.selectbox("Victim", actor_options.keys(), format_func=actor_options.get, index=None)
+    victim_id = st.selectbox(
+        "Victim", actor_options.keys(), format_func=actor_options.get, index=None
+    )
     if victim_id and victim_id != st.session_state.graph.victim_id:
-        execute_command(SetRoleCommand(st.session_state.graph, 'victim', victim_id))
+        execute_command(SetRoleCommand(st.session_state.graph, "victim", victim_id))
 
-    if st.button("Generate Attack Paths", type="primary", use_container_width=True, disabled=not(st.session_state.graph.attacker_id and st.session_state.graph.victim_id)):
+    if st.button(
+        "Generate Attack Paths",
+        type="primary",
+        use_container_width=True,
+        disabled=not (st.session_state.graph.attacker_id and st.session_state.graph.victim_id),
+    ):
         with st.spinner("Analyzing graph..."):
             paths = find_attack_paths_cached(st.session_state.graph, GreedyDFSStrategy())
             st.session_state.attack_paths = paths
             st.session_state.selected_path_index = None
             st.rerun()
+
 
 def render_attack_path_results():
     if not st.session_state.attack_paths:
@@ -373,11 +413,58 @@ def render_attack_path_results():
 
     st.write(f"Found **{len(st.session_state.attack_paths)}** potential path(s).")
     for i, path in enumerate(st.session_state.attack_paths):
-        path_str = " → ".join([st.session_state.graph.get_node(step.actor_id).name for step in path.steps if step.step_type == "trigger"])
+        path_str = " → ".join(
+            [
+                st.session_state.graph.get_node(step.actor_id).name
+                for step in path.steps
+                if step.step_type == "trigger"
+            ]
+        )
         victim_node = st.session_state.graph.get_node(path.steps[-1].target_id)
         if victim_node:
             path_str += f" → **{victim_node.name}**"
-        
-        if st.button(f"Path {i+1}: {path_str}", key=f"path_{i}", use_container_width=True):
+
+        if st.button(
+            f"Path {i+1}: {path_str}", key=f"path_{i}", use_container_width=True
+        ):
             st.session_state.selected_path_index = i
             st.rerun()
+
+def render_about_model():
+    """Renders the explanation of the core attack modeling concepts."""
+    st.markdown(
+        """
+        #### An Opinionated Framework for Modeling Attacks
+        
+        Welcome! This tool isn't just a diagrammer; it's a framework for thinking about system security. We've simplified complex systems into a few core ideas to help find attack paths you might otherwise miss.
+
+        ---
+
+        ##### **The Primitives: Actors & Datasources**
+
+        * **Actors `([ ])`**: The "doers." These are the only components that can perform actions.
+            * *Think: The AI Assistant, a Human Driver, an Email Tool.*
+        
+        * **Datasources `[( )]`**: The "things." These are passive buckets of data or state that get acted upon.
+            * *Think: A database, the car's screen, the audio speakers.*
+
+        This simple but strict separation helps clarify who can do what to whom.
+
+        ---
+
+        ##### **The Key: What is a "Trigger"?**
+
+        An attack is just a chain of events. A **Trigger** is the spark that causes one of those events. It's how a dormant Actor wakes up and becomes active. The goal of this tool is to find the sequence of triggers that lets an Attacker compromise the Victim's Assets.
+
+        There are only three ways an Actor can be triggered:
+        1.  **Self-Trigger `🔄`**: The Actor activates itself (e.g., a scheduled task).
+        2.  **Datasource Trigger `🔔`**: The Actor wakes up because data changed in a Datasource it's "watching".
+        3.  **Communication Trigger (`comm`/`resp` edge)**: The Actor is activated by a direct command from another Actor.
+
+        ---
+
+        ##### **Our Thesis: A Grammar for Attacks**
+
+        We believe any complex attack can be described using these simple primitives. Think of it as a **formal grammar for hacking**. By finding "sentences" in this grammar that start at the Attacker and end at the Victim's `Assets`, we can uncover surprising and non-obvious vulnerabilities.
+        """
+    )

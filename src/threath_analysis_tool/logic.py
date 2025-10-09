@@ -54,14 +54,10 @@ class GreedyDFSStrategy(PathfindingStrategy):
         solutions = []
 
         def dfs(current_actor_id: str, current_path: list[PathStep], visited: set):
+            # The termination condition is now reaching the end of the trigger path.
+            # The node with distance 0 is the 'Assets' node.
             if trigger_distances.get(current_actor_id, float("inf")) == 0:
-                final_step = PathStep(
-                    actor_id=current_actor_id,
-                    action="trigger",
-                    target_id=graph.victim_id,
-                    step_type="trigger",
-                )
-                solutions.append(AttackChain(steps=list(current_path) + [final_step]))
+                solutions.append(AttackChain(steps=list(current_path)))
                 return
             if len(current_path) >= APP_CONFIG.analysis.max_path_length:
                 return
@@ -71,7 +67,6 @@ class GreedyDFSStrategy(PathfindingStrategy):
                 key=lambda actor_id: trigger_distances.get(actor_id, float("inf")),
             )
             for next_actor_id in possible_next_actors:
-                # This logic will need to be updated in Phase 2 to safely handle self-loops.
                 is_self_loop = next_actor_id == current_actor_id
                 if not is_self_loop and next_actor_id in visited:
                     continue
@@ -121,6 +116,8 @@ def find_attack_paths_cached(
 class GraphAnalysis:
     """Facade for the graph analysis subsystem."""
 
+    ASSETS_NODE_ID = "assets_node"
+
     def __init__(self, graph: Graph, strategy: PathfindingStrategy):
         self.graph = graph
         self.strategy = strategy
@@ -140,7 +137,7 @@ class GraphAnalysis:
                 writers_by_ds.setdefault(edge.target, []).append(edge.source)
 
         for node in self.graph.nodes:
-            if node.type == "Actor":
+            if isinstance(node, Actor):
                 for trigger in node.triggers:
                     if isinstance(trigger, SelfTrigger):
                         self.trigger_graph.setdefault(node.id, []).append(node.id)
@@ -155,6 +152,10 @@ class GraphAnalysis:
                             self.trigger_graph.setdefault(writer_actor_id, []).append(
                                 node.id
                             )
+        
+        # Add the final 'exploit' step from the victim to the assets node
+        if self.graph.victim_id:
+            self.trigger_graph.setdefault(self.graph.victim_id, []).append(self.ASSETS_NODE_ID)
 
         # --- Build Reverse Poison Graph ---
         for edge in self.graph.edges:
@@ -186,9 +187,11 @@ class GraphAnalysis:
         if not self.graph.attacker_id or not self.graph.victim_id:
             return []
 
+        # The search heuristic now calculates distance from the final 'Assets' node.
         trigger_distances = self._run_reverse_bfs(
-            [self.graph.victim_id], self.trigger_graph
+            [self.ASSETS_NODE_ID], self.trigger_graph
         )
+        
         victim_inputs = [
             edge.source
             for edge in self.graph.edges
@@ -213,6 +216,10 @@ class GraphAnalysis:
             for step in highlight_path.steps:
                 highlight_nodes.update([step.actor_id, step.target_id])
                 highlight_edges.add(tuple(sorted((step.actor_id, step.target_id))))
+            # Also highlight the final assets node if a path is selected
+            if highlight_path.steps:
+                highlight_nodes.add(self.ASSETS_NODE_ID)
+
 
         for node in self.graph.nodes:
             shape_start, shape_end = ("([", "])") if node.type == "Actor" else ("[(", ")]")
@@ -254,6 +261,24 @@ class GraphAnalysis:
             lines.append(f"    {edge.source} {arrow} {edge.target}")
             if tuple(sorted((edge.source, edge.target))) in highlight_edges:
                 lines.append(f"    linkStyle {i} stroke:#80ed99,stroke-width:4px")
+
+        if self.graph.victim_id:
+            # Define the Assets node
+            lines.append(f'    {self.ASSETS_NODE_ID}(("Assets"))')
+            
+            # Add the final 'exploit' edge
+            lines.append(f"    {self.graph.victim_id} -- exploit --> {self.ASSETS_NODE_ID}")
+            exploit_edge_index = len(self.graph.edges)
+
+            # Style the victim zone
+            if self.ASSETS_NODE_ID in highlight_nodes:
+                lines.append(f"    style {self.ASSETS_NODE_ID} fill:#caffbf,stroke:#80ed99,stroke-width:4px")
+                lines.append(f"    linkStyle {exploit_edge_index} stroke:#80ed99,stroke-width:4px")
+            else:
+                lines.append(f"    style {self.ASSETS_NODE_ID} fill:#ffd6a5,stroke:#ff9f43,stroke-width:4px")
+                lines.append(f"    linkStyle {exploit_edge_index} stroke:red,stroke-width:4px")
+
+
         return "\n".join(lines)
 
     def render_mermaid(self, mermaid_code: str):

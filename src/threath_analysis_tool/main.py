@@ -23,47 +23,64 @@ st.set_page_config(
 
 
 # --- UI Rendering Functions ---
+def render_about_model():
+    """Renders the explanation of the core attack modeling concepts."""
+    st.markdown(
+        """
+        #### An Opinionated Framework for Modeling Attacks
+        
+        Welcome! This tool isn't just a diagrammer; it's a framework for thinking about system security. We've simplified complex systems into a few core ideas to help find attack paths you might otherwise miss.
+
+        ---
+
+        ##### **The Primitives: Actors & Datasources**
+
+        * **Actors `([ ])`**: The "doers." These are the only components that can perform actions.
+            * *Think: The AI Assistant, a Human Driver, an Email Tool.*
+        
+        * **Datasources `[( )]`**: The "things." These are passive buckets of data or state that get acted upon.
+            * *Think: A database, the car's screen, the audio speakers.*
+
+        This simple but strict separation helps clarify who can do what to whom.
+
+        ---
+
+        ##### **The Key: What is a "Trigger"?**
+
+        An attack is just a chain of events. A **Trigger** is the spark that causes one of those events. It's how a dormant Actor wakes up and becomes active. The goal of this tool is to find the sequence of triggers that lets an Attacker compromise the Victim's Assets.
+
+        There are only three ways an Actor can be triggered:
+        1.  **Self-Trigger `🔄`**: The Actor activates itself (e.g., a scheduled task).
+        2.  **Datasource Trigger `🔔`**: The Actor wakes up because data changed in a Datasource it's "watching".
+        3.  **Communication Trigger (`comm`/`resp` edge)**: The Actor is activated by a direct command from another Actor.
+
+        ---
+
+        ##### **Our Thesis: A Grammar for Attacks**
+
+        We believe any complex attack can be described using these simple primitives. Think of it as a **formal grammar for hacking**. By finding "sentences" in this grammar that start at the Attacker and end at the Victim's `Assets`, we can uncover surprising and non-obvious vulnerabilities.
+        """
+    )
+
+
 def render_legend():
     """Renders the legend and help text in a collapsible expander."""
-    with st.expander("Graph Legend & Help"):
+    with st.expander("Graph Legend"):
         st.markdown(
             """
-            #### Core Concepts
-            - **Actor**: An active component that can perform actions and be triggered.
-              - *Examples: Human Driver, AI Assistant, Email Tool, Map Tool.*
-            - **Datasource`**: A passive component that stores or represents data.
-              - *Examples: Long-Term Memory, Email Storage*
-            
-            ---
-            
-            #### Node Reference
             * **Indicators (on Actors):**
                 - `🔄` **Self-Trigger**: This actor can initiate actions on its own.
                 - `🔔` **Datasource Trigger**: This actor is triggered when data is written to a datasource it "watches".
             * **Roles (Colors):**
                 - **Red Fill**: The selected **Attacker**.
-                - **Orange Fill**: The selected **Victim**.
+                - **Orange Fill**: The selected **Victim** and its compromised **Assets**.
                 - **Green Highlight**: Part of a selected **Attack Path**.
 
             ---
 
-            #### Edge Reference
-            * **Solid Line (`───>`)**: Represents a **unidirectional action** (`read`, `write`, or an initiating `comm` trigger). The source actively performs the action.
-            * **Dashed Line (`- - ->`)**: Represents a **response-only** channel (`resp`). The source can only act after being contacted by the target.
-            
-            * **Edge Types:**
-                - `read`: An Actor ingests or perceives data from a Datasource.
-                - `write`: An Actor outputs or modifies data in a Datasource.
-                - `comm`: An Actor initiates a trigger/command to another Actor.
-                - `resp`: An Actor responds to a communication from another Actor.
-
-            ---
-
-            #### How to Use
-            1.  **Build**: Use the sidebar menus to model your system's components and connections.
-            2.  **Set Roles**: Use "Analysis Controls" to select an **Attacker** and a **Victim**.
-            3.  **Generate**: Click "Generate Attack Paths" to run the analysis.
-            4.  **Explore**: Click a path in the results list to highlight it on the graph.
+            * **Arrow Styles:**
+                - **Solid Line (`───>`)**: Represents a **unidirectional action** (`read`, `write`, or an initiating `comm` trigger).
+                - **Dashed Line (`-·-·-·>`)**: Represents a **response-only** channel (`resp`).
             """
         )
 
@@ -82,6 +99,10 @@ def main():
         st.session_state.edge_creation_source_id = None
 
     st.title("🛡️ AI Agent Red Team Workbench")
+
+    with st.expander("About the Attack Model"):
+        render_about_model()
+
     if st.session_state.graph and st.session_state.graph.name:
         st.markdown(f"Currently working on: **{st.session_state.graph.name}**")
     else:
@@ -94,7 +115,6 @@ def main():
         with col1:
             st.subheader("System Architecture Graph")
 
-            # Render the legend above the graph
             render_legend()
 
             with st.container(height=800, border=False):
