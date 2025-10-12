@@ -8,8 +8,10 @@ class StorageConfig(BaseSettings):
     sessions_dir: Path = Field(default=Path("sessions"), description="Directory to store graph session files.")
 
 class AnalysisConfig(BaseSettings):
-    max_path_length: int = Field(default=10, gt=0, description="Maximum number of steps to explore in a single attack path.")
-    default_strategy: str = Field(default="GreedyDFSStrategy", description="The default pathfinding strategy to use.")
+    num_paths_to_find: int = Field(default=5, gt=0, description="The default number of attack paths to generate.")
+    max_attack_cost: int = Field(default=25, gt=0, description="The maximum total cost for an attack path search, to prevent infinite loops.")
+    attempt_cost: int = Field(default=5, ge=0, description="The additional cost penalty for each new 'Attempt' initiated by the attacker.")
+
 
 class AppConfig(BaseSettings):
     model_config = SettingsConfigDict(env_nested_delimiter="__")
