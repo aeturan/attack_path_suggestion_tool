@@ -242,36 +242,42 @@ def render_analysis_controls():
             plans = find_attack_paths_cached(st.session_state.graph, StrategicPlannerStrategy(), num_paths, max_cost, attempt_cost)
             st.session_state.attack_paths, st.session_state.selected_path_index = plans, 0 if plans else None; st.rerun()
 
+
 # --- FINAL RECURSIVE RENDERER ---
 
 def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_sub_step: bool = False, start_index: int = 1):
     """A recursive helper function to render a list of AttackSteps."""
     for k, step in enumerate(steps):
-        action = step.push_poison_action
-        step_title = f"Step {start_index + k}: {get_name_func(action.source_id)} `—({action.edge_type})→` {get_name_func(action.target_id)}"
         
-        # Use a collapsed expander for each step
+        action = step.push_poison_action
+        
+        # --- THE FIX: Create different titles based on the action type ---
+        if action.edge_type == 'write':
+            source_actor_id = action.source_id
+            datasource_id = action.target_id
+            target_actor_id = step.target_actor_id
+            step_title = f"Step {start_index + k}: {get_name_func(source_actor_id)} `—(write)→` {get_name_func(datasource_id)} `—(read)→` {get_name_func(target_actor_id)}"
+        else:
+            source_actor_id = action.source_id
+            target_actor_id = step.target_actor_id
+            step_title = f"Step {start_index + k}: {get_name_func(source_actor_id)} `—({action.edge_type})→` {get_name_func(target_actor_id)}"
+        
         with st.expander(step_title, expanded=False):
-            # 1. Edge Activation Trigger
             st.write("**1. Edge Activation Trigger**")
             if step.edge_activation_trigger:
                 with st.container(border=True):
                     st.caption(f"Required to activate conditional edge (Cost: {step.edge_activation_trigger.cost})")
-                    # RECURSIVE CALL for the sub-steps
                     _render_attack_steps(step.edge_activation_trigger.steps, get_name_func, is_sub_step=True)
             else:
                 st.caption("Not needed: The main action is not conditional.")
 
-            # 2. Push Poison
             st.write(f"**2. Push Poison**")
             st.markdown(f"> The action **`{action.edge_type}`** from {get_name_func(action.source_id)} to {get_name_func(action.target_id)} pushes the poison.")
             
-            # 3. Consumption Trigger
             st.write("**3. Consumption Trigger**")
             if step.consumption_trigger:
                 with st.container(border=True):
                     st.caption(f"Required to make the target consume the poison (Cost: {step.consumption_trigger.cost})")
-                    # RECURSIVE CALL for the sub-steps
                     _render_attack_steps(step.consumption_trigger.steps, get_name_func, is_sub_step=True)
             else:
                 if action.edge_type in ["communicate", "respond"]:
@@ -304,13 +310,15 @@ def render_attack_path_results():
     for i, plan in enumerate(st.session_state.attack_paths):
         with st.expander(f"Attack Plan {i+1} (Total Cost: {plan.total_cost})", expanded=True):
             
-            # Flatten the plan's sequences into a single list of steps
             all_steps = []
-            for sequence in plan.attempts:
-                all_steps.extend(sequence.steps)
+            if plan.attempts: # Gracefully handle potentially empty plans
+                for sequence in plan.attempts:
+                    all_steps.extend(sequence.steps)
 
-            # Initial call to the recursive rendering function on the flat list
-            _render_attack_steps(all_steps, get_name)
+            if all_steps:
+                _render_attack_steps(all_steps, get_name)
+            else:
+                st.caption("This plan has no steps.")
 
 def render_about_model():
     """Renders the explanation of the core attack modeling concepts."""

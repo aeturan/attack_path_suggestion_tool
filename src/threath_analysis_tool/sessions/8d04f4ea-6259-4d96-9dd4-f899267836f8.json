@@ -6,30 +6,76 @@
       "id": "X_40b7",
       "name": "X",
       "type": "Actor",
-      "description": "",
-      "tags": [],
-      "assumptions": [],
-      "max_self_triggers": 1,
-      "triggers": []
+      "triggers": [
+        {
+          "type": "communication",
+          "source_actor_id": "a_013c",
+          "edge_type": "respond"
+        }
+      ]
     },
     {
       "id": "X_datasource_3622",
       "name": "X_datasource",
-      "type": "Datasource",
-      "description": "",
-      "tags": [],
-      "assumptions": []
+      "type": "Datasource"
+    },
+    {
+      "id": "a_013c",
+      "name": "a",
+      "type": "Actor",
+      "triggers": [
+        {
+          "type": "communication",
+          "source_actor_id": "X_40b7",
+          "edge_type": "communicate"
+        },
+        {
+          "type": "communication",
+          "source_actor_id": "Y_332c",
+          "edge_type": "communicate"
+        }
+      ]
+    },
+    {
+      "id": "Y_332c",
+      "name": "Y",
+      "type": "Actor",
+      "triggers": [
+        {
+          "type": "communication",
+          "source_actor_id": "a_013c",
+          "edge_type": "respond"
+        }
+      ]
     }
   ],
   "edges": [
     {
       "source": "X_40b7",
       "target": "X_datasource_3622",
-      "type": "write",
-      "response_only": false,
-      "cardinality": "request-response"
+      "type": "write"
+    },
+    {
+      "source": "X_40b7",
+      "target": "a_013c",
+      "type": "communicate"
+    },
+    {
+      "source": "a_013c",
+      "target": "X_40b7",
+      "type": "respond"
+    },
+    {
+      "source": "Y_332c",
+      "target": "a_013c",
+      "type": "communicate"
+    },
+    {
+      "source": "a_013c",
+      "target": "Y_332c",
+      "type": "respond"
     }
   ],
-  "attacker_id": null,
-  "victim_id": null
+  "attacker_id": "X_40b7",
+  "victim_id": "a_013c"
 }

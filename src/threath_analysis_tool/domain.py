@@ -49,49 +49,32 @@ class Edge(BaseModel):
     target: str
     type: Literal["read", "write", "communicate", "respond"]
 
-# --- Analysis Result Models (REDESIGNED) ---
+# --- Analysis Result Models ---
 
 class Action(BaseModel):
-    """Represents a single atomic action, like 'write' or 'communicate'."""
     source_id: str
     edge_type: str
     target_id: str
 
 class TriggerChain(BaseModel):
-    """
-    Represents a sequence of actions that causes an actor to be triggered.
-    UPDATED: Now contains a full list of AttackStep objects for recursive rendering.
-    """
-    steps: List["AttackStep"] = Field(default_factory=list) # Changed from List[Action]
+    steps: List["AttackStep"] = Field(default_factory=list)
     cost: int
 
 class AttackStep(BaseModel):
-    """
-    Represents one step in an Attempt. It includes the main action and the
-    triggers required to make it happen.
-    """
     push_poison_action: Action
+    target_actor_id: str # NEW: The ultimate actor targeted by this step.
     consumption_trigger: Optional[TriggerChain] = None
     edge_activation_trigger: Optional[TriggerChain] = None
     total_step_cost: int
 
-# This is required for Pydantic to resolve the recursive model reference
 TriggerChain.model_rebuild()
 
 class Attempt(BaseModel):
-    """
-    Represents a self-contained sequence of steps initiated by the attacker
-    to achieve a specific subgoal (e.g., compromise an actor).
-    """
     steps: List[AttackStep] = Field(default_factory=list)
     total_attempt_cost: int
     summary: str 
 
 class AttackPlan(BaseModel):
-    """
-    The final output of the planner. It is a sequence of one or more
-    Attempts that lead to the final goal.
-    """
     attempts: List[Attempt] = Field(default_factory=list)
     total_cost: int
 

@@ -1,0 +1,15 @@
+{
+  "id": "85d46a02-60ad-44b3-862f-39e3f121f792",
+  "name": "agent",
+  "nodes": [
+    {
+      "id": "attacker_37eb",
+      "name": "attacker",
+      "type": "Actor",
+      "triggers": []
+    }
+  ],
+  "edges": [],
+  "attacker_id": null,
+  "victim_id": null
+}

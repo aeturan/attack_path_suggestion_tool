@@ -52,13 +52,12 @@ class StrategicPlannerStrategy(PathfindingStrategy):
         
         tie_breaker = itertools.count()
 
-        # --- FIX 1 of 4: Update state to track the "last_compromised_actor" ---
         initial_state = (
-            graph_analysis.poison_heuristic.get(attacker_id, 999), # f_cost
-            next(tie_breaker), # tie_breaker
-            0, # g_cost
+            graph_analysis.poison_heuristic.get(attacker_id, 999),
+            next(tie_breaker),
+            0,
             AttackPlan(attempts=[], total_cost=0),
-            attacker_id, # last_compromised_actor_id
+            attacker_id,
             frozenset([attacker_id]),
             frozenset(),
             frozenset(),
@@ -69,7 +68,6 @@ class StrategicPlannerStrategy(PathfindingStrategy):
         visited = set()
 
         while pq:
-            # --- FIX 2 of 4: Unpack the "last_compromised_actor_id" ---
             _, g_cost, plan, last_compromised_actor_id, compromised_actors, poisoned_ds, active_channels = heapq.heappop(pq)[1:]
 
             if victim_id in compromised_actors:
@@ -81,13 +79,11 @@ class StrategicPlannerStrategy(PathfindingStrategy):
             if g_cost >= max_cost:
                 continue
             
-            # The visited key now includes the last compromised actor to distinguish paths
             visited_key = (last_compromised_actor_id, compromised_actors, poisoned_ds, active_channels)
             if visited_key in visited:
                 continue
             visited.add(visited_key)
 
-            # --- FIX 3 of 4: Remove loop and only expand from the last compromised actor ---
             actor_id = last_compromised_actor_id
             for target_id in graph_analysis.poison_graph.get(actor_id, []):
                 if target_id in compromised_actors:
@@ -110,7 +106,6 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                         if activation_key not in active_channels:
                             cheapest_activation_cost = float('inf')
                             best_activator = None
-                            # Activation can still come from any previously compromised actor
                             for activator_candidate in compromised_actors:
                                 trigger_chain = graph_analysis.trigger_routing_table.get(activator_candidate, {}).get(target_id)
                                 if trigger_chain and trigger_chain.cost < cheapest_activation_cost:
@@ -123,7 +118,13 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                                 continue
                     
                     step_cost = 1 + activation_cost
-                    step = AttackStep(push_poison_action=push_action, edge_activation_trigger=edge_trigger, total_step_cost=step_cost)
+                    # --- THE FIX: Populate the new target_actor_id field ---
+                    step = AttackStep(
+                        push_poison_action=push_action, 
+                        target_actor_id=target_id,
+                        edge_activation_trigger=edge_trigger, 
+                        total_step_cost=step_cost
+                    )
                     
                     new_attempt = Attempt(
                         steps=[step],
@@ -140,7 +141,6 @@ class StrategicPlannerStrategy(PathfindingStrategy):
 
                     cheapest_trigger_cost = float('inf')
                     best_trigger = None
-                    # The trigger can come from any actor we already control
                     for trigger_source in compromised_actors:
                         trigger_chain = graph_analysis.trigger_routing_table.get(trigger_source, {}).get(target_id)
                         if trigger_chain and trigger_chain.cost < cheapest_trigger_cost:
@@ -151,7 +151,13 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                         continue
 
                     write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
-                    write_step = AttackStep(push_poison_action=write_action, consumption_trigger=best_trigger, total_step_cost=1 + best_trigger.cost)
+                    # --- THE FIX: Populate the new target_actor_id field ---
+                    write_step = AttackStep(
+                        push_poison_action=write_action, 
+                        target_actor_id=target_id,
+                        consumption_trigger=best_trigger, 
+                        total_step_cost=1 + best_trigger.cost
+                    )
                     
                     new_attempt = Attempt(
                         steps=[write_step],
@@ -168,7 +174,6 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     h_cost = graph_analysis.poison_heuristic.get(target_id, 999)
                     f_cost = new_g_cost + h_cost
 
-                    # --- FIX 4 of 4: Push the new state tuple with the next "last_compromised_actor" ---
                     heapq.heappush(pq, (f_cost, next(tie_breaker), new_g_cost, new_plan, target_id, new_compromised_actors, new_poisoned_ds, new_active_channels))
 
         return sorted(found_plans, key=lambda p: p.total_cost)
@@ -225,8 +230,10 @@ class GraphAnalysis:
                         steps = []
                         for i in range(len(new_path) - 1):
                             action = Action(source_id=new_path[i], edge_type="comm", target_id=new_path[i+1])
+                            # --- THE FIX: Populate the new target_actor_id field ---
                             step = AttackStep(
                                 push_poison_action=action,
+                                target_actor_id=action.target_id,
                                 consumption_trigger=None,
                                 edge_activation_trigger=None,
                                 total_step_cost=1
