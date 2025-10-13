@@ -52,11 +52,13 @@ class StrategicPlannerStrategy(PathfindingStrategy):
         
         tie_breaker = itertools.count()
 
+        # --- FIX 1 of 4: Update state to track the "last_compromised_actor" ---
         initial_state = (
             graph_analysis.poison_heuristic.get(attacker_id, 999), # f_cost
             next(tie_breaker), # tie_breaker
             0, # g_cost
             AttackPlan(attempts=[], total_cost=0),
+            attacker_id, # last_compromised_actor_id
             frozenset([attacker_id]),
             frozenset(),
             frozenset(),
@@ -67,7 +69,8 @@ class StrategicPlannerStrategy(PathfindingStrategy):
         visited = set()
 
         while pq:
-            _, g_cost, plan, compromised_actors, poisoned_ds, active_channels = heapq.heappop(pq)[1:]
+            # --- FIX 2 of 4: Unpack the "last_compromised_actor_id" ---
+            _, g_cost, plan, last_compromised_actor_id, compromised_actors, poisoned_ds, active_channels = heapq.heappop(pq)[1:]
 
             if victim_id in compromised_actors:
                 found_plans.append(plan)
@@ -78,90 +81,95 @@ class StrategicPlannerStrategy(PathfindingStrategy):
             if g_cost >= max_cost:
                 continue
             
-            visited_key = (compromised_actors, poisoned_ds, active_channels)
+            # The visited key now includes the last compromised actor to distinguish paths
+            visited_key = (last_compromised_actor_id, compromised_actors, poisoned_ds, active_channels)
             if visited_key in visited:
                 continue
             visited.add(visited_key)
 
-            for actor_id in compromised_actors:
-                for target_id in graph_analysis.poison_graph.get(actor_id, []):
-                    if target_id in compromised_actors:
+            # --- FIX 3 of 4: Remove loop and only expand from the last compromised actor ---
+            actor_id = last_compromised_actor_id
+            for target_id in graph_analysis.poison_graph.get(actor_id, []):
+                if target_id in compromised_actors:
+                    continue
+                
+                original_edge = graph_analysis.graph.get_edge(actor_id, target_id)
+                
+                new_attempt = None
+                new_compromised_actors = compromised_actors
+                new_poisoned_ds = poisoned_ds
+                new_active_channels = active_channels
+
+                if original_edge and original_edge.type in ["communicate", "respond"]:
+                    push_action = Action(source_id=actor_id, edge_type=original_edge.type, target_id=target_id)
+                    
+                    edge_trigger = None
+                    activation_cost = 0
+                    if original_edge.type == "respond":
+                        activation_key = (target_id, actor_id)
+                        if activation_key not in active_channels:
+                            cheapest_activation_cost = float('inf')
+                            best_activator = None
+                            # Activation can still come from any previously compromised actor
+                            for activator_candidate in compromised_actors:
+                                trigger_chain = graph_analysis.trigger_routing_table.get(activator_candidate, {}).get(target_id)
+                                if trigger_chain and trigger_chain.cost < cheapest_activation_cost:
+                                    cheapest_activation_cost = trigger_chain.cost
+                                    best_activator = trigger_chain
+                            if best_activator:
+                                edge_trigger = best_activator
+                                activation_cost = best_activator.cost
+                            else:
+                                continue
+                    
+                    step_cost = 1 + activation_cost
+                    step = AttackStep(push_poison_action=push_action, edge_activation_trigger=edge_trigger, total_step_cost=step_cost)
+                    
+                    new_attempt = Attempt(
+                        steps=[step],
+                        total_attempt_cost=attempt_cost + step_cost,
+                        summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via direct communication."
+                    )
+                    new_compromised_actors = compromised_actors.union({target_id})
+                    if original_edge.type == "communicate":
+                        new_active_channels = active_channels.union({(target_id, actor_id)})
+
+                else: # This is a write/read hop
+                    datasource_id = next((e.target for e in graph_analysis.graph.edges if e.source == actor_id and e.type == "write" and target_id in [r.target for r in graph_analysis.graph.edges if r.source == e.target and r.type == "read"]), None)
+                    if not datasource_id: continue
+
+                    cheapest_trigger_cost = float('inf')
+                    best_trigger = None
+                    # The trigger can come from any actor we already control
+                    for trigger_source in compromised_actors:
+                        trigger_chain = graph_analysis.trigger_routing_table.get(trigger_source, {}).get(target_id)
+                        if trigger_chain and trigger_chain.cost < cheapest_trigger_cost:
+                            cheapest_trigger_cost = trigger_chain.cost
+                            best_trigger = trigger_chain
+                    
+                    if not best_trigger:
                         continue
+
+                    write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
+                    write_step = AttackStep(push_poison_action=write_action, consumption_trigger=best_trigger, total_step_cost=1 + best_trigger.cost)
                     
-                    original_edge = graph_analysis.graph.get_edge(actor_id, target_id)
+                    new_attempt = Attempt(
+                        steps=[write_step],
+                        total_attempt_cost=attempt_cost + write_step.total_step_cost,
+                        summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via Datasource '{graph_analysis.graph.get_node(datasource_id).name}'."
+                    )
+                    new_compromised_actors = compromised_actors.union({target_id})
+                    new_poisoned_ds = poisoned_ds.union({datasource_id})
+
+                if new_attempt:
+                    new_g_cost = g_cost + new_attempt.total_attempt_cost
+                    new_plan = AttackPlan(attempts=plan.attempts + [new_attempt], total_cost=new_g_cost)
                     
-                    new_attempt = None
-                    new_compromised_actors = compromised_actors
-                    new_poisoned_ds = poisoned_ds
-                    new_active_channels = active_channels
+                    h_cost = graph_analysis.poison_heuristic.get(target_id, 999)
+                    f_cost = new_g_cost + h_cost
 
-                    if original_edge and original_edge.type in ["communicate", "respond"]:
-                        push_action = Action(source_id=actor_id, edge_type=original_edge.type, target_id=target_id)
-                        
-                        edge_trigger = None
-                        activation_cost = 0
-                        if original_edge.type == "respond":
-                            activation_key = (target_id, actor_id)
-                            if activation_key not in active_channels:
-                                cheapest_activation_cost = float('inf')
-                                best_activator = None
-                                for activator_candidate in compromised_actors:
-                                    trigger_chain = graph_analysis.trigger_routing_table.get(activator_candidate, {}).get(target_id)
-                                    if trigger_chain and trigger_chain.cost < cheapest_activation_cost:
-                                        cheapest_activation_cost = trigger_chain.cost
-                                        best_activator = trigger_chain
-                                if best_activator:
-                                    edge_trigger = best_activator
-                                    activation_cost = best_activator.cost
-                                else:
-                                    continue
-                        
-                        step_cost = 1 + activation_cost
-                        step = AttackStep(push_poison_action=push_action, edge_activation_trigger=edge_trigger, total_step_cost=step_cost)
-                        
-                        new_attempt = Attempt(
-                            steps=[step],
-                            total_attempt_cost=attempt_cost + step_cost,
-                            summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via direct communication."
-                        )
-                        new_compromised_actors = compromised_actors.union({target_id})
-                        if original_edge.type == "communicate":
-                            new_active_channels = active_channels.union({(target_id, actor_id)})
-
-                    else:
-                        datasource_id = next((e.target for e in graph_analysis.graph.edges if e.source == actor_id and e.type == "write" and target_id in [r.target for r in graph_analysis.graph.edges if r.source == e.target and r.type == "read"]), None)
-                        if not datasource_id: continue
-
-                        cheapest_trigger_cost = float('inf')
-                        best_trigger = None
-                        for trigger_source in compromised_actors:
-                            trigger_chain = graph_analysis.trigger_routing_table.get(trigger_source, {}).get(target_id)
-                            if trigger_chain and trigger_chain.cost < cheapest_trigger_cost:
-                                cheapest_trigger_cost = trigger_chain.cost
-                                best_trigger = trigger_chain
-                        
-                        if not best_trigger:
-                            continue
-
-                        write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
-                        write_step = AttackStep(push_poison_action=write_action, consumption_trigger=best_trigger, total_step_cost=1 + best_trigger.cost)
-                        
-                        new_attempt = Attempt(
-                            steps=[write_step],
-                            total_attempt_cost=attempt_cost + write_step.total_step_cost,
-                            summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via Datasource '{graph_analysis.graph.get_node(datasource_id).name}'."
-                        )
-                        new_compromised_actors = compromised_actors.union({target_id})
-                        new_poisoned_ds = poisoned_ds.union({datasource_id})
-
-                    if new_attempt:
-                        new_g_cost = g_cost + new_attempt.total_attempt_cost
-                        new_plan = AttackPlan(attempts=plan.attempts + [new_attempt], total_cost=new_g_cost)
-                        
-                        h_cost = min(graph_analysis.poison_heuristic.get(c, 999) for c in new_compromised_actors)
-                        f_cost = new_g_cost + h_cost
-
-                        heapq.heappush(pq, (f_cost, next(tie_breaker), new_g_cost, new_plan, new_compromised_actors, new_poisoned_ds, new_active_channels))
+                    # --- FIX 4 of 4: Push the new state tuple with the next "last_compromised_actor" ---
+                    heapq.heappush(pq, (f_cost, next(tie_breaker), new_g_cost, new_plan, target_id, new_compromised_actors, new_poisoned_ds, new_active_channels))
 
         return sorted(found_plans, key=lambda p: p.total_cost)
 
@@ -196,10 +204,6 @@ class GraphAnalysis:
         return trigger_graph
 
     def _compute_trigger_routing_table(self) -> Dict[str, Dict[str, Optional[TriggerChain]]]:
-        """
-        UPDATED: Pre-computes all-pairs shortest paths on the trigger graph,
-        storing the result as a list of detailed AttackStep objects.
-        """
         routing_table = {}
         all_nodes = set(self.trigger_graph.keys())
         for targets in self.trigger_graph.values():
@@ -218,9 +222,6 @@ class GraphAnalysis:
                         visited.add(neighbor)
                         new_path = list(path) + [neighbor]
                         
-                        # --- THIS IS THE CRITICAL FIX ---
-                        # This block ensures TriggerChains are created with a `.steps` attribute
-                        # containing full AttackStep objects, matching the domain model.
                         steps = []
                         for i in range(len(new_path) - 1):
                             action = Action(source_id=new_path[i], edge_type="comm", target_id=new_path[i+1])
@@ -232,7 +233,6 @@ class GraphAnalysis:
                             )
                             steps.append(step)
                         routing_table[start_node][neighbor] = TriggerChain(steps=steps, cost=len(steps))
-                        # --- END CRITICAL FIX ---
                         
                         queue.append(new_path)
         return routing_table
