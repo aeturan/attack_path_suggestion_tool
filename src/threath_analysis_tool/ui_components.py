@@ -1,11 +1,12 @@
 import uuid
 import itertools
+from typing import List
 import streamlit as st
 from pydantic import ValidationError
 
 from config import APP_CONFIG
-from domain import Actor, DatasourceTrigger, SelfTrigger, AttackPlan # Updated import
-from logic import StrategicPlannerStrategy, find_attack_paths_cached # Updated import
+from domain import Actor, AttackStep, DatasourceTrigger, SelfTrigger, AttackPlan
+from logic import StrategicPlannerStrategy, find_attack_paths_cached
 from session_management import (
     create_new_session, delete_current_session, get_all_sessions,
     load_session_by_id, save_current_session
@@ -15,14 +16,14 @@ from ui_commands import (
     DeleteEdgeCommand, DeleteNodeCommand, EditNodeCommand, SetRoleCommand
 )
 
-# --- Helper Functions ---
+# ... (All other functions in this file remain the same) ...
+
 def execute_command(command):
     st.session_state.history.execute(command)
     save_current_session()
     st.toast(command.description, icon="✅")
     st.rerun()
 
-# --- UI Rendering Functions ---
 def render_sidebar():
     with st.sidebar:
         st.header("Session Management")
@@ -225,7 +226,7 @@ def render_analysis_controls():
     st.subheader("Analysis Parameters")
     num_paths = st.number_input("Number of Paths to Find", 1, 50, APP_CONFIG.analysis.num_paths_to_find)
     max_cost = st.number_input("Max Attack Cost", 5, 100, APP_CONFIG.analysis.max_attack_cost)
-    attempt_cost = st.number_input("Attempt Cost", 0, 20, APP_CONFIG.analysis.attempt_cost, help="Penalty for each new 'Attempt' by the attacker.")
+    attempt_cost = st.number_input("Attempt Cost", 0, 20, APP_CONFIG.analysis.attempt_cost, help="Penalty for each new independent sequence initiated by the attacker.")
     st.markdown("---")
     actor_opts = {n.id: n.name for n in st.session_state.graph.nodes if n.type == "Actor"}
     if not actor_opts: st.caption("Add actors to run an analysis."); return
@@ -241,6 +242,43 @@ def render_analysis_controls():
             plans = find_attack_paths_cached(st.session_state.graph, StrategicPlannerStrategy(), num_paths, max_cost, attempt_cost)
             st.session_state.attack_paths, st.session_state.selected_path_index = plans, 0 if plans else None; st.rerun()
 
+# --- FINAL RECURSIVE RENDERER ---
+
+def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_sub_step: bool = False, start_index: int = 1):
+    """A recursive helper function to render a list of AttackSteps."""
+    for k, step in enumerate(steps):
+        action = step.push_poison_action
+        step_title = f"Step {start_index + k}: {get_name_func(action.source_id)} `—({action.edge_type})→` {get_name_func(action.target_id)}"
+        
+        # Use a collapsed expander for each step
+        with st.expander(step_title, expanded=False):
+            # 1. Edge Activation Trigger
+            st.write("**1. Edge Activation Trigger**")
+            if step.edge_activation_trigger:
+                with st.container(border=True):
+                    st.caption(f"Required to activate conditional edge (Cost: {step.edge_activation_trigger.cost})")
+                    # RECURSIVE CALL for the sub-steps
+                    _render_attack_steps(step.edge_activation_trigger.steps, get_name_func, is_sub_step=True)
+            else:
+                st.caption("Not needed: The main action is not conditional.")
+
+            # 2. Push Poison
+            st.write(f"**2. Push Poison**")
+            st.markdown(f"> The action **`{action.edge_type}`** from {get_name_func(action.source_id)} to {get_name_func(action.target_id)} pushes the poison.")
+            
+            # 3. Consumption Trigger
+            st.write("**3. Consumption Trigger**")
+            if step.consumption_trigger:
+                with st.container(border=True):
+                    st.caption(f"Required to make the target consume the poison (Cost: {step.consumption_trigger.cost})")
+                    # RECURSIVE CALL for the sub-steps
+                    _render_attack_steps(step.consumption_trigger.steps, get_name_func, is_sub_step=True)
+            else:
+                if action.edge_type in ["communicate", "respond"]:
+                    st.caption("Not needed: The communication action is its own trigger.")
+                else:
+                    st.caption("Not needed for this step.")
+
 def render_attack_path_results():
     if 'attack_paths' not in st.session_state or not st.session_state.attack_paths:
         st.info("No attack plans generated. Select an attacker and victim, then run the analysis."); return
@@ -253,11 +291,9 @@ def render_attack_path_results():
         node = graph.get_node(node_id)
         return f"_{node.name}_" if node else "_Unknown_"
 
-    # Let user select which plan to view and highlight
     plan_options = {i: f"Plan {i+1} (Cost: {p.total_cost})" for i, p in enumerate(st.session_state.attack_paths)}
-    
     if len(plan_options) > 1:
-        selected_idx = st.radio(
+        st.radio(
             "Select a plan to highlight in the graph:",
             options=list(plan_options.keys()),
             format_func=plan_options.get,
@@ -267,25 +303,14 @@ def render_attack_path_results():
     
     for i, plan in enumerate(st.session_state.attack_paths):
         with st.expander(f"Attack Plan {i+1} (Total Cost: {plan.total_cost})", expanded=True):
-            for j, attempt in enumerate(plan.attempts):
-                st.markdown(f"##### Attempt {j+1}: {attempt.summary} (Cost: {attempt.total_attempt_cost})")
-                for k, step in enumerate(attempt.steps):
-                     with st.container(border=True):
-                        action = step.push_poison_action
-                        step_summary = f"**Step {k+1}**: {get_name(action.source_id)} `—({action.edge_type})→` {get_name(action.target_id)}"
-                        st.markdown(step_summary)
+            
+            # Flatten the plan's sequences into a single list of steps
+            all_steps = []
+            for sequence in plan.attempts:
+                all_steps.extend(sequence.steps)
 
-                        if step.edge_activation_trigger and step.edge_activation_trigger.actions:
-                            chain = step.edge_activation_trigger
-                            st.write(f"**Edge Activation Trigger** (Cost: {chain.cost})")
-                            chain_summary = " → ".join([get_name(a.source_id) for a in chain.actions] + [get_name(chain.actions[-1].target_id)])
-                            st.caption(f"⛓️ {chain_summary}")
-                        
-                        if step.consumption_trigger and step.consumption_trigger.actions:
-                            chain = step.consumption_trigger
-                            st.write(f"**Consumption Trigger** (Cost: {chain.cost})")
-                            chain_summary = " → ".join([get_name(a.source_id) for a in chain.actions] + [get_name(chain.actions[-1].target_id)])
-                            st.caption(f"⛓️ {chain_summary}")
+            # Initial call to the recursive rendering function on the flat list
+            _render_attack_steps(all_steps, get_name)
 
 def render_about_model():
     """Renders the explanation of the core attack modeling concepts."""

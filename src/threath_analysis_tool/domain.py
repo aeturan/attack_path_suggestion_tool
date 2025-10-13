@@ -49,7 +49,8 @@ class Edge(BaseModel):
     target: str
     type: Literal["read", "write", "communicate", "respond"]
 
-# --- Analysis Result Models ---
+# --- Analysis Result Models (REDESIGNED) ---
+
 class Action(BaseModel):
     """Represents a single atomic action, like 'write' or 'communicate'."""
     source_id: str
@@ -57,8 +58,11 @@ class Action(BaseModel):
     target_id: str
 
 class TriggerChain(BaseModel):
-    """Represents a sequence of actions that causes an actor to be triggered."""
-    actions: List[Action] = Field(default_factory=list)
+    """
+    Represents a sequence of actions that causes an actor to be triggered.
+    UPDATED: Now contains a full list of AttackStep objects for recursive rendering.
+    """
+    steps: List["AttackStep"] = Field(default_factory=list) # Changed from List[Action]
     cost: int
 
 class AttackStep(BaseModel):
@@ -68,25 +72,29 @@ class AttackStep(BaseModel):
     """
     push_poison_action: Action
     consumption_trigger: Optional[TriggerChain] = None
-    edge_activation_trigger: Optional[TriggerChain] = None # Formerly path_activation_trigger
+    edge_activation_trigger: Optional[TriggerChain] = None
     total_step_cost: int
+
+# This is required for Pydantic to resolve the recursive model reference
+TriggerChain.model_rebuild()
 
 class Attempt(BaseModel):
     """
-    NEW: Represents a self-contained sequence of steps initiated by the attacker
+    Represents a self-contained sequence of steps initiated by the attacker
     to achieve a specific subgoal (e.g., compromise an actor).
     """
     steps: List[AttackStep] = Field(default_factory=list)
     total_attempt_cost: int
-    summary: str # A human-readable summary of the attempt's goal.
+    summary: str 
 
 class AttackPlan(BaseModel):
     """
-    RENAMED: The final output of the planner. It is a sequence of one or more
+    The final output of the planner. It is a sequence of one or more
     Attempts that lead to the final goal.
     """
     attempts: List[Attempt] = Field(default_factory=list)
     total_cost: int
+
 
 # --- Main Graph & History Models ---
 class Graph(BaseModel):

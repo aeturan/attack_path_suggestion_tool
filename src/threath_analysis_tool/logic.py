@@ -15,7 +15,7 @@ from domain import (
     Action,
     Actor,
     AttackPlan,
-    Attempt, # New
+    Attempt,
     AttackStep,
     CommunicationTrigger,
     DatasourceTrigger,
@@ -37,12 +37,8 @@ class PathfindingStrategy(ABC):
     ) -> List[AttackPlan]:
         pass
 
-# NEW: The core strategic planner algorithm.
+# The core strategic planner algorithm.
 class StrategicPlannerStrategy(PathfindingStrategy):
-    """
-    A state-space planner that finds a sequence of "Attempts" to compromise the victim.
-    It searches for a plan rather than a single path.
-    """
     def find_paths(
         self,
         graph_analysis: "GraphAnalysis",
@@ -54,19 +50,16 @@ class StrategicPlannerStrategy(PathfindingStrategy):
         attacker_id = graph_analysis.graph.attacker_id
         victim_id = graph_analysis.graph.victim_id
         
-        # This is used to create the unique counter for tie-breaking.
         tie_breaker = itertools.count()
 
-        # --- FIX 1 of 3: Correct the initial_state tuple structure ---
-        # The unique counter is moved to the second position to act as the tie-breaker.
         initial_state = (
-            graph_analysis.poison_heuristic.get(attacker_id, 999), # f_cost (g+h)
-            next(tie_breaker), # The tie_breaker
-            0, # g_cost (cost so far)
-            AttackPlan(attempts=[], total_cost=0), # The plan itself
-            frozenset([attacker_id]), # Compromised actors
-            frozenset(), # Poisoned datasources
-            frozenset(), # Active respond channels
+            graph_analysis.poison_heuristic.get(attacker_id, 999), # f_cost
+            next(tie_breaker), # tie_breaker
+            0, # g_cost
+            AttackPlan(attempts=[], total_cost=0),
+            frozenset([attacker_id]),
+            frozenset(),
+            frozenset(),
         )
 
         pq = [initial_state]
@@ -74,17 +67,14 @@ class StrategicPlannerStrategy(PathfindingStrategy):
         visited = set()
 
         while pq:
-            # --- FIX 2 of 3: Update the unpacking to match the new tuple structure ---
             _, g_cost, plan, compromised_actors, poisoned_ds, active_channels = heapq.heappop(pq)[1:]
 
-            # Check if we have reached the goal state
             if victim_id in compromised_actors:
                 found_plans.append(plan)
                 if len(found_plans) >= num_paths:
                     break
                 continue
 
-            # Pruning conditions
             if g_cost >= max_cost:
                 continue
             
@@ -93,21 +83,11 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                 continue
             visited.add(visited_key)
 
-            # --- Generate Successor States by Launching a New "Attempt" ---
-            # An attempt is a plan to compromise one new actor.
-            
-            # Iterate through all actors we currently control
             for actor_id in compromised_actors:
-                # Find all outgoing poison paths from this actor
                 for target_id in graph_analysis.poison_graph.get(actor_id, []):
-                    # We only care about compromising new actors
                     if target_id in compromised_actors:
                         continue
                     
-                    # This potential target defines a new possible Attempt.
-                    # Now, we calculate the cost and structure of this Attempt.
-                    
-                    # Find the original edge(s) that constitute this poison path hop
                     original_edge = graph_analysis.graph.get_edge(actor_id, target_id)
                     
                     new_attempt = None
@@ -115,17 +95,14 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     new_poisoned_ds = poisoned_ds
                     new_active_channels = active_channels
 
-                    # --- Case 1: Direct Compromise (communicate/respond) ---
                     if original_edge and original_edge.type in ["communicate", "respond"]:
                         push_action = Action(source_id=actor_id, edge_type=original_edge.type, target_id=target_id)
                         
-                        # Calculate cost of activating the edge if it's a 'respond'
                         edge_trigger = None
                         activation_cost = 0
                         if original_edge.type == "respond":
                             activation_key = (target_id, actor_id)
                             if activation_key not in active_channels:
-                                # Find cheapest way to activate the channel from an already compromised actor
                                 cheapest_activation_cost = float('inf')
                                 best_activator = None
                                 for activator_candidate in compromised_actors:
@@ -135,9 +112,9 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                                         best_activator = trigger_chain
                                 if best_activator:
                                     edge_trigger = best_activator
-                                    activation_cost = best_activator.cost + 1 # +1 for the final comm edge
+                                    activation_cost = best_activator.cost
                                 else:
-                                    continue # Cannot activate this respond edge, abort this path
+                                    continue
                         
                         step_cost = 1 + activation_cost
                         step = AttackStep(push_poison_action=push_action, edge_activation_trigger=edge_trigger, total_step_cost=step_cost)
@@ -151,12 +128,10 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                         if original_edge.type == "communicate":
                             new_active_channels = active_channels.union({(target_id, actor_id)})
 
-                    # --- Case 2: Indirect Compromise (write -> read) ---
-                    else: # This is a write/read hop
+                    else:
                         datasource_id = next((e.target for e in graph_analysis.graph.edges if e.source == actor_id and e.type == "write" and target_id in [r.target for r in graph_analysis.graph.edges if r.source == e.target and r.type == "read"]), None)
                         if not datasource_id: continue
 
-                        # Find the cheapest trigger to make the target actor consume the poison
                         cheapest_trigger_cost = float('inf')
                         best_trigger = None
                         for trigger_source in compromised_actors:
@@ -166,7 +141,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                                 best_trigger = trigger_chain
                         
                         if not best_trigger:
-                            continue # We can't trigger the target, so this attempt is impossible.
+                            continue
 
                         write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
                         write_step = AttackStep(push_poison_action=write_action, consumption_trigger=best_trigger, total_step_cost=1 + best_trigger.cost)
@@ -179,17 +154,13 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                         new_compromised_actors = compromised_actors.union({target_id})
                         new_poisoned_ds = poisoned_ds.union({datasource_id})
 
-
-                    # --- Push the new state to the priority queue ---
                     if new_attempt:
                         new_g_cost = g_cost + new_attempt.total_attempt_cost
                         new_plan = AttackPlan(attempts=plan.attempts + [new_attempt], total_cost=new_g_cost)
                         
-                        # Heuristic is the min distance from any compromised actor to the goal
                         h_cost = min(graph_analysis.poison_heuristic.get(c, 999) for c in new_compromised_actors)
                         f_cost = new_g_cost + h_cost
 
-                        # --- FIX 3 of 3: Correct the heappush tuple structure ---
                         heapq.heappush(pq, (f_cost, next(tie_breaker), new_g_cost, new_plan, new_compromised_actors, new_poisoned_ds, new_active_channels))
 
         return sorted(found_plans, key=lambda p: p.total_cost)
@@ -206,7 +177,6 @@ class GraphAnalysis:
         self.poison_heuristic: Dict[str, int] = self._compute_poison_heuristic_bfs()
 
     def _build_trigger_graph(self) -> Dict[str, List[str]]:
-        """Builds a graph where an edge A->B means A's action can trigger B."""
         trigger_graph: Dict[str, List[str]] = {}
         writers_by_ds: Dict[str, List[str]] = {}
         for edge in self.graph.edges:
@@ -226,14 +196,17 @@ class GraphAnalysis:
         return trigger_graph
 
     def _compute_trigger_routing_table(self) -> Dict[str, Dict[str, Optional[TriggerChain]]]:
-        """Pre-computes all-pairs shortest paths on the trigger graph."""
+        """
+        UPDATED: Pre-computes all-pairs shortest paths on the trigger graph,
+        storing the result as a list of detailed AttackStep objects.
+        """
         routing_table = {}
         all_nodes = set(self.trigger_graph.keys())
         for targets in self.trigger_graph.values():
             all_nodes.update(targets)
 
         for start_node in all_nodes:
-            routing_table[start_node] = {start_node: TriggerChain(actions=[], cost=0)}
+            routing_table[start_node] = {start_node: TriggerChain(steps=[], cost=0)}
             queue = deque([[start_node]])
             visited = {start_node}
             
@@ -244,16 +217,27 @@ class GraphAnalysis:
                     if neighbor not in visited:
                         visited.add(neighbor)
                         new_path = list(path) + [neighbor]
-                        actions = [Action(source_id=new_path[i], edge_type="comm", target_id=new_path[i+1]) for i in range(len(new_path) - 1)]
-                        routing_table[start_node][neighbor] = TriggerChain(actions=actions, cost=len(actions))
+                        
+                        # --- THIS IS THE CRITICAL FIX ---
+                        # This block ensures TriggerChains are created with a `.steps` attribute
+                        # containing full AttackStep objects, matching the domain model.
+                        steps = []
+                        for i in range(len(new_path) - 1):
+                            action = Action(source_id=new_path[i], edge_type="comm", target_id=new_path[i+1])
+                            step = AttackStep(
+                                push_poison_action=action,
+                                consumption_trigger=None,
+                                edge_activation_trigger=None,
+                                total_step_cost=1
+                            )
+                            steps.append(step)
+                        routing_table[start_node][neighbor] = TriggerChain(steps=steps, cost=len(steps))
+                        # --- END CRITICAL FIX ---
+                        
                         queue.append(new_path)
         return routing_table
 
     def _build_poison_graph(self) -> Dict[str, List[str]]:
-        """
-        Builds a graph of who can compromise whom.
-        An edge A->B means A can pass malicious control/data to B.
-        """
         poison_graph: Dict[str, List[str]] = {}
         for edge in self.graph.edges:
             if edge.type in ["communicate", "respond"]:
@@ -272,10 +256,6 @@ class GraphAnalysis:
         return poison_graph
 
     def _compute_poison_heuristic_bfs(self) -> Dict[str, int]:
-        """
-        Calculates the shortest distance from all nodes TO the victim
-        using a single reverse BFS on the poison graph.
-        """
         if not self.graph.victim_id:
             return {}
         rev_poison_graph: Dict[str, List[str]] = {}
