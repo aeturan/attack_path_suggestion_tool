@@ -88,15 +88,12 @@ class StrategicPlannerStrategy(PathfindingStrategy):
             actor_id = last_compromised_actor_id
             for target_id in graph_analysis.poison_graph.get(actor_id, []):
                 
-                # --- THIS IS THE CRITICAL FIX ---
-                # Add a special case to handle the final exploit step to the Assets node.
                 if target_id == graph_analysis.ASSETS_NODE_ID:
-                    if actor_id != victim_id: continue # Only the victim can exploit assets.
+                    if actor_id != victim_id: continue
 
                     push_action = Action(source_id=actor_id, edge_type="exploit", target_id=target_id)
                     compromise_edge = (actor_id, target_id)
                     
-                    # Check if this exploit path has already been taken
                     used_edges = compromised_edges_by_actor.get(target_id, frozenset())
                     if compromise_edge in used_edges: continue
 
@@ -119,11 +116,10 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
                     new_compromised_state_fs = frozenset(new_compromised_edges_by_actor.items())
                     
-                    f_cost = new_g_cost # Heuristic is 0 at the goal
+                    f_cost = new_g_cost
                     
                     heapq.heappush(pq, (f_cost, next(tie_breaker), new_g_cost, new_plan, target_id, new_compromised_state_fs, active_channels))
-                    continue # Finished handling the goal case
-                # --- END CRITICAL FIX ---
+                    continue
 
                 original_edge = graph_analysis.graph.get_edge(actor_id, target_id)
                 new_attempt = None
@@ -143,7 +139,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                         if activation_key not in active_channels:
                             cheapest_activation_cost = float('inf')
                             best_activator = None
-                            for activator_candidate in compromised_edges_by_actor: # Corrected variable name
+                            for activator_candidate in compromised_edges_by_actor:
                                 trigger_chain = graph_analysis.trigger_routing_table.get(activator_candidate, {}).get(target_id)
                                 if trigger_chain and trigger_chain.cost < cheapest_activation_cost:
                                     cheapest_activation_cost = trigger_chain.cost
@@ -178,7 +174,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                             cheapest_trigger_cost = trigger_chain.cost
                             best_trigger = trigger_chain
                     
-                    if not best_trigger: continue
+                    if best_trigger is None: continue # Changed from `not best_trigger` to handle cost=0 case
 
                     write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
                     write_step = AttackStep(push_poison_action=write_action, target_actor_id=target_id, compromise_edge=compromise_edge, consumption_trigger=best_trigger, total_step_cost=1 + best_trigger.cost)
@@ -234,7 +230,23 @@ class GraphAnalysis:
             all_nodes.update(targets)
 
         for start_node in all_nodes:
-            routing_table[start_node] = {start_node: TriggerChain(steps=[], cost=0)}
+            # --- THIS IS THE CRITICAL FIX for the "Cost of Zero" bug ---
+            node_obj = self.graph.get_node(start_node)
+            has_self_trigger = isinstance(node_obj, Actor) and any(isinstance(t, SelfTrigger) for t in node_obj.triggers)
+            
+            if has_self_trigger:
+                action = Action(source_id=start_node, edge_type="self_trigger", target_id=start_node)
+                step = AttackStep(
+                    push_poison_action=action,
+                    target_actor_id=start_node,
+                    compromise_edge=(start_node, start_node),
+                    total_step_cost=1
+                )
+                routing_table[start_node] = {start_node: TriggerChain(steps=[step], cost=1)}
+            else:
+                routing_table[start_node] = {start_node: TriggerChain(steps=[], cost=0)}
+            # --- END CRITICAL FIX ---
+
             queue = deque([[start_node]])
             visited = {start_node}
             
@@ -253,8 +265,6 @@ class GraphAnalysis:
                                 push_poison_action=action,
                                 target_actor_id=action.target_id,
                                 compromise_edge=(action.source_id, action.target_id),
-                                consumption_trigger=None,
-                                edge_activation_trigger=None,
                                 total_step_cost=1
                             )
                             steps.append(step)
