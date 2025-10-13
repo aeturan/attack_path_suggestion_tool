@@ -3,11 +3,12 @@ The main entry point and presentation layer for the Streamlit application.
 """
 import streamlit as st
 
-from domain import CommandHistory
-from logic import GraphAnalysis, AStarPathfindingStrategy
+from domain import CommandHistory, AttackPlan # Updated import
+from logic import GraphAnalysis, StrategicPlannerStrategy # Updated import
 from session_management import load_latest_session
 from ui_components import render_attack_path_results, render_sidebar
 
+# ... (render_about_model and render_legend are unchanged) ...
 
 def render_about_model():
     st.markdown(
@@ -114,11 +115,11 @@ def main():
                 highlight_path = None
                 if st.session_state.selected_path_index is not None:
                     highlight_path = st.session_state.attack_paths[st.session_state.selected_path_index]
-                # --- THE FIX: Pass the strategy to the constructor ---
-                analysis = GraphAnalysis(st.session_state.graph, AStarPathfindingStrategy())
+                
+                analysis = GraphAnalysis(st.session_state.graph)
                 analysis.render_mermaid(analysis.generate_mermaid_code(highlight_path))
         with col2:
-            st.subheader("Generated Attack Paths")
+            st.subheader("Generated Attack Plans")
             render_attack_path_results()
     else:
         st.info("Create a new graph or load one to get started.")

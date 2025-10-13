@@ -51,20 +51,41 @@ class Edge(BaseModel):
 
 # --- Analysis Result Models ---
 class Action(BaseModel):
+    """Represents a single atomic action, like 'write' or 'communicate'."""
     source_id: str
     edge_type: str
     target_id: str
+
 class TriggerChain(BaseModel):
+    """Represents a sequence of actions that causes an actor to be triggered."""
     actions: List[Action] = Field(default_factory=list)
     cost: int
+
 class AttackStep(BaseModel):
-    path_activation_trigger: Optional[TriggerChain] = None
+    """
+    Represents one step in an Attempt. It includes the main action and the
+    triggers required to make it happen.
+    """
     push_poison_action: Action
-    consumption_trigger: TriggerChain
+    consumption_trigger: Optional[TriggerChain] = None
+    edge_activation_trigger: Optional[TriggerChain] = None # Formerly path_activation_trigger
     total_step_cost: int
-class Attack(BaseModel):
+
+class Attempt(BaseModel):
+    """
+    NEW: Represents a self-contained sequence of steps initiated by the attacker
+    to achieve a specific subgoal (e.g., compromise an actor).
+    """
     steps: List[AttackStep] = Field(default_factory=list)
-    actor_path: List[str] = Field(default_factory=list)
+    total_attempt_cost: int
+    summary: str # A human-readable summary of the attempt's goal.
+
+class AttackPlan(BaseModel):
+    """
+    RENAMED: The final output of the planner. It is a sequence of one or more
+    Attempts that lead to the final goal.
+    """
+    attempts: List[Attempt] = Field(default_factory=list)
     total_cost: int
 
 # --- Main Graph & History Models ---

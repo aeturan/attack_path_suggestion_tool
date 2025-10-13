@@ -4,8 +4,8 @@ import streamlit as st
 from pydantic import ValidationError
 
 from config import APP_CONFIG
-from domain import Actor, DatasourceTrigger, SelfTrigger, Attack
-from logic import AStarPathfindingStrategy, find_attack_paths_cached
+from domain import Actor, DatasourceTrigger, SelfTrigger, AttackPlan # Updated import
+from logic import StrategicPlannerStrategy, find_attack_paths_cached # Updated import
 from session_management import (
     create_new_session, delete_current_session, get_all_sessions,
     load_session_by_id, save_current_session
@@ -235,47 +235,57 @@ def render_analysis_controls():
     victim_id = st.selectbox("Victim", actor_opts.keys(), format_func=actor_opts.get, index=None)
     if victim_id and victim_id != st.session_state.graph.victim_id:
         execute_command(SetRoleCommand(st.session_state.graph, "victim", victim_id))
-    if st.button("Generate Attack Paths", type="primary", use_container_width=True,
+    if st.button("Generate Attack Plans", type="primary", use_container_width=True,
         disabled=not (st.session_state.graph.attacker_id and st.session_state.graph.victim_id)):
         with st.spinner("Analyzing graph..."):
-            paths = find_attack_paths_cached(st.session_state.graph, AStarPathfindingStrategy(), num_paths, max_cost, attempt_cost)
-            st.session_state.attack_paths, st.session_state.selected_path_index = paths, None; st.rerun()
+            plans = find_attack_paths_cached(st.session_state.graph, StrategicPlannerStrategy(), num_paths, max_cost, attempt_cost)
+            st.session_state.attack_paths, st.session_state.selected_path_index = plans, 0 if plans else None; st.rerun()
 
 def render_attack_path_results():
     if 'attack_paths' not in st.session_state or not st.session_state.attack_paths:
-        st.info("No attack paths generated. Select an attacker and victim, then run the analysis."); return
+        st.info("No attack plans generated. Select an attacker and victim, then run the analysis."); return
     
-    st.write(f"Found **{len(st.session_state.attack_paths)}** potential attack(s).")
+    st.write(f"Found **{len(st.session_state.attack_paths)}** potential attack plan(s).")
+    
     graph = st.session_state.graph
     def get_name(node_id):
         if node_id == "assets_node": return "**Assets**"
         node = graph.get_node(node_id)
-        return node.name if node else "Unknown"
+        return f"_{node.name}_" if node else "_Unknown_"
 
-    for i, attack in enumerate(st.session_state.attack_paths):
-        # --- THE FIX: Use the new self-contained actor_path for the summary ---
-        summary = " → ".join([get_name(id) for id in attack.actor_path])
-        
-        with st.expander(f"Attack {i+1}: {summary} (Cost: {attack.total_cost})"):
-            st.markdown("##### Attack Steps:")
-            for j, step in enumerate(attack.steps):
-                action = step.push_poison_action
-                step_summary = f"**Step {j+1}** (Cost: {step.total_step_cost}): {get_name(action.source_id)} `—({action.edge_type})→` {get_name(action.target_id)}"
-                
-                with st.container(border=True):
-                    st.markdown(step_summary)
-                    
-                    if step.path_activation_trigger and step.path_activation_trigger.actions:
-                        chain = step.path_activation_trigger
-                        st.write(f"**Path Activation Trigger** (Cost: {chain.cost})")
-                        chain_summary = " → ".join([get_name(a.source_id) for a in chain.actions] + [get_name(chain.actions[-1].target_id)])
-                        st.caption(chain_summary)
-                    
-                    if step.consumption_trigger and step.consumption_trigger.actions:
-                        chain = step.consumption_trigger
-                        st.write(f"**Consumption Trigger** (Cost: {chain.cost})")
-                        chain_summary = " → ".join([get_name(a.source_id) for a in chain.actions] + [get_name(chain.actions[-1].target_id)])
-                        st.caption(chain_summary)
+    # Let user select which plan to view and highlight
+    plan_options = {i: f"Plan {i+1} (Cost: {p.total_cost})" for i, p in enumerate(st.session_state.attack_paths)}
+    
+    if len(plan_options) > 1:
+        selected_idx = st.radio(
+            "Select a plan to highlight in the graph:",
+            options=list(plan_options.keys()),
+            format_func=plan_options.get,
+            horizontal=True,
+            key="selected_path_index",
+        )
+    
+    for i, plan in enumerate(st.session_state.attack_paths):
+        with st.expander(f"Attack Plan {i+1} (Total Cost: {plan.total_cost})", expanded=True):
+            for j, attempt in enumerate(plan.attempts):
+                st.markdown(f"##### Attempt {j+1}: {attempt.summary} (Cost: {attempt.total_attempt_cost})")
+                for k, step in enumerate(attempt.steps):
+                     with st.container(border=True):
+                        action = step.push_poison_action
+                        step_summary = f"**Step {k+1}**: {get_name(action.source_id)} `—({action.edge_type})→` {get_name(action.target_id)}"
+                        st.markdown(step_summary)
+
+                        if step.edge_activation_trigger and step.edge_activation_trigger.actions:
+                            chain = step.edge_activation_trigger
+                            st.write(f"**Edge Activation Trigger** (Cost: {chain.cost})")
+                            chain_summary = " → ".join([get_name(a.source_id) for a in chain.actions] + [get_name(chain.actions[-1].target_id)])
+                            st.caption(f"⛓️ {chain_summary}")
+                        
+                        if step.consumption_trigger and step.consumption_trigger.actions:
+                            chain = step.consumption_trigger
+                            st.write(f"**Consumption Trigger** (Cost: {chain.cost})")
+                            chain_summary = " → ".join([get_name(a.source_id) for a in chain.actions] + [get_name(chain.actions[-1].target_id)])
+                            st.caption(f"⛓️ {chain_summary}")
 
 def render_about_model():
     """Renders the explanation of the core attack modeling concepts."""
