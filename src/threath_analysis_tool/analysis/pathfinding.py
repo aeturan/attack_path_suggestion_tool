@@ -1,4 +1,3 @@
-# analysis/pathfinding.py
 import heapq
 import itertools
 from abc import ABC, abstractmethod
@@ -130,9 +129,34 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                                 if trigger_chain and trigger_chain.cost < cheapest_activation_cost:
                                     cheapest_activation_cost = trigger_chain.cost
                                     best_activator = trigger_chain
+                            
                             if best_activator:
-                                edge_trigger = best_activator
-                                activation_cost = best_activator.cost
+                                # Create a deep copy to safely modify the trigger chain
+                                final_activator_trigger = best_activator.model_copy(deep=True)
+                                
+                                # Define the final activating communication action
+                                # (e.g., car_agent --comm--> email_tool)
+                                activating_action = Action(
+                                    source_id=target_id,
+                                    edge_type='communicate',
+                                    target_id=actor_id
+                                )
+                                
+                                # Create the AttackStep for this final action
+                                activating_step = AttackStep(
+                                    push_poison_action=activating_action,
+                                    target_actor_id=actor_id,
+                                    compromise_edge=(activating_action.source_id, activating_action.target_id),
+                                    total_step_cost=1
+                                )
+                                
+                                # Append the final step to the chain and update its cost
+                                final_activator_trigger.steps.append(activating_step)
+                                final_activator_trigger.cost += 1
+                                
+                                # Use this enhanced trigger chain for the AttackStep
+                                edge_trigger = final_activator_trigger
+                                activation_cost = final_activator_trigger.cost
                             else:
                                 continue
                     
