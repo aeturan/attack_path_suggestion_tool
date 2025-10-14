@@ -23,7 +23,6 @@ class GraphAnalysis:
     def __init__(self, graph: Graph):
         self.graph = graph
         self.trigger_graph: Dict[str, List[str]] = self._build_trigger_graph()
-        self.trigger_routing_table: Dict[str, Dict[str, Optional[TriggerChain]]] = self._compute_trigger_routing_table()
         self.poison_graph: Dict[str, List[str]] = self._build_poison_graph()
         self.poison_heuristic: Dict[str, int] = self._compute_poison_heuristic_bfs()
 
@@ -46,61 +45,66 @@ class GraphAnalysis:
                             trigger_graph.setdefault(writer_actor_id, []).append(node.id)
         return trigger_graph
 
-    def _compute_trigger_routing_table(self) -> Dict[str, Dict[str, Optional[TriggerChain]]]:
-        routing_table = {}
-        all_nodes = set(self.trigger_graph.keys())
-        for targets in self.trigger_graph.values():
-            all_nodes.update(targets)
+    def find_cheapest_trigger_chain(self, potential_source_ids: set[str], target_id: str, active_channels: set[tuple[str, str]]) -> TriggerChain | None:
+        """
+        Performs a dynamic, multi-source BFS on the trigger graph to find the cheapest
+        valid trigger chain from any potential source to the target, respecting the
+        current state of active 'respond' channels.
+        """
+        # A source is only valid if it's actually in the trigger graph model
+        valid_sources = {sid for sid in potential_source_ids if sid in self.trigger_graph or any(sid in v for v in self.trigger_graph.values())}
+        if not valid_sources:
+            return None
 
-        for start_node in all_nodes:
-            node_obj = self.graph.get_node(start_node)
-            has_self_trigger = isinstance(node_obj, Actor) and any(isinstance(t, SelfTrigger) for t in node_obj.triggers)
-            
-            if has_self_trigger:
-                action = Action(source_id=start_node, edge_type="self_trigger", target_id=start_node)
-                step = AttackStep(
-                    push_poison_action=action,
-                    target_actor_id=start_node,
-                    compromise_edge=(start_node, start_node),
-                    total_step_cost=1
-                )
-                routing_table[start_node] = {start_node: TriggerChain(steps=[step], cost=1)}
-            else:
-                routing_table[start_node] = {start_node: TriggerChain(steps=[], cost=0)}
+        # Queue stores tuples of (path_list)
+        queue = deque([[source_id] for source_id in valid_sources])
+        
+        # Visited dictionary to store the shortest path to a node
+        visited = {source_id: [source_id] for source_id in valid_sources}
 
-            queue = deque([[start_node]])
-            visited = {start_node}
-            
-            while queue:
-                path = queue.popleft()
-                node = path[-1]
-                for neighbor in self.trigger_graph.get(node, []):
-                    if neighbor not in visited:
-                        visited.add(neighbor)
-                        new_path = list(path) + [neighbor]
-                        
-                        steps = []
-                        for i in range(len(new_path) - 1):
-                            source_node_id = new_path[i]
-                            target_node_id = new_path[i+1]
-                            
-                            # --- FIX: Look up the actual edge type from the graph ---
-                            edge = self.graph.get_edge(source_node_id, target_node_id)
-                            # Default to 'unknown' if edge not found, though this shouldn't happen
-                            edge_type = edge.type if edge else "unknown" 
-                            
-                            action = Action(source_id=source_node_id, edge_type=edge_type, target_id=target_node_id)
-                            step = AttackStep(
-                                push_poison_action=action,
-                                target_actor_id=action.target_id,
-                                compromise_edge=(action.source_id, action.target_id),
-                                total_step_cost=1
-                            )
-                            steps.append(step)
-                        routing_table[start_node][neighbor] = TriggerChain(steps=steps, cost=len(steps))
-                        
+        while queue:
+            path = queue.popleft()
+            current_node_id = path[-1]
+
+            if current_node_id == target_id:
+                # We found the shortest path. Now, build the TriggerChain object.
+                steps = []
+                for i in range(len(path) - 1):
+                    source_step_id = path[i]
+                    target_step_id = path[i+1]
+                    
+                    edge = self.graph.get_edge(source_step_id, target_step_id)
+                    edge_type = edge.type if edge else "trigger"
+                    
+                    action = Action(source_id=source_step_id, edge_type=edge_type, target_id=target_step_id)
+                    step = AttackStep(
+                        push_poison_action=action,
+                        target_actor_id=action.target_id,
+                        compromise_edge=(action.source_id, action.target_id),
+                        total_step_cost=1
+                    )
+                    steps.append(step)
+                return TriggerChain(steps=steps, cost=len(steps))
+
+            for neighbor_id in self.trigger_graph.get(current_node_id, []):
+                if neighbor_id not in visited:
+                    # THE CORE LOGIC: Check if this path is valid
+                    is_valid_transition = True
+                    edge_to_neighbor = self.graph.get_edge(current_node_id, neighbor_id)
+                    
+                    if edge_to_neighbor and edge_to_neighbor.type == 'respond':
+                        # This is a conditional edge. It's only traversable if the
+                        # inverse 'communicate' channel is in the active_channels set.
+                        required_channel = (neighbor_id, current_node_id)
+                        if required_channel not in active_channels:
+                            is_valid_transition = False # This path is blocked in the current state.
+
+                    if is_valid_transition:
+                        new_path = path + [neighbor_id]
+                        visited[neighbor_id] = new_path
                         queue.append(new_path)
-        return routing_table
+
+        return None # Target is not reachable with a valid trigger chain
 
     def _build_poison_graph(self) -> Dict[str, List[str]]:
         poison_graph: Dict[str, List[str]] = {}
@@ -142,6 +146,7 @@ class GraphAnalysis:
     def find_attack_paths(self, strategy: PathfindingStrategy, num_paths: int, max_cost: int) -> list[AttackPlan]:
         if not self.graph.attacker_id or not self.graph.victim_id: return []
         return strategy.find_paths(self, num_paths, max_cost)
+
 
 @st.cache_data(hash_funcs={GraphAnalysis: lambda g: g.graph.model_dump_json()})
 def find_attack_paths_cached(_graph: Graph, _strategy: PathfindingStrategy, num_paths: int, max_cost: int) -> list[AttackPlan]:

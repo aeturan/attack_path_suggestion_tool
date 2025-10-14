@@ -145,13 +145,11 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     if original_edge.type == "respond":
                         activation_key = (actor_id, target_id)
                         if activation_key not in current_channels:
-                            cheapest_activation_cost = float('inf')
-                            best_activator = None
-                            for activator_candidate in compromised_edges_by_actor:
-                                trigger_chain = graph_analysis.trigger_routing_table.get(activator_candidate, {}).get(target_id)
-                                if trigger_chain and trigger_chain.cost < cheapest_activation_cost:
-                                    cheapest_activation_cost = trigger_chain.cost
-                                    best_activator = trigger_chain
+                            best_activator = graph_analysis.find_cheapest_trigger_chain(
+                                potential_source_ids=set(compromised_edges_by_actor.keys()),
+                                target_id=target_id,
+                                active_channels=current_channels
+                            )
                             
                             if best_activator:
                                 final_activator_trigger = best_activator.model_copy(deep=True)
@@ -183,13 +181,11 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     if compromise_edge in used_edges: continue
                     
                     datasource_id = read_edge.source
-                    cheapest_trigger_cost = float('inf')
-                    best_trigger = None
-                    for trigger_source in compromised_edges_by_actor:
-                        trigger_chain = graph_analysis.trigger_routing_table.get(trigger_source, {}).get(target_id)
-                        if trigger_chain and trigger_chain.cost < cheapest_trigger_cost:
-                            cheapest_trigger_cost = trigger_chain.cost
-                            best_trigger = trigger_chain
+                    best_trigger = graph_analysis.find_cheapest_trigger_chain(
+                        potential_source_ids=set(compromised_edges_by_actor.keys()),
+                        target_id=target_id,
+                        active_channels=current_channels
+                    )
                     
                     if best_trigger is None: continue
 
