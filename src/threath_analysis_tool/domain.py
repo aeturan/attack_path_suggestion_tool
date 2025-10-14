@@ -3,7 +3,7 @@ Contains all data structures and domain models for the application.
 """
 import uuid
 from abc import ABC, abstractmethod
-from typing import List, Literal, Optional, Union, Tuple
+from typing import List, Literal, Optional, Union, Tuple, Set
 
 from pydantic import BaseModel, Field
 
@@ -78,6 +78,8 @@ class Attempt(BaseModel):
 class AttackPlan(BaseModel):
     attempts: List[Attempt] = Field(default_factory=list)
     total_cost: int
+    # Add a transient field to carry the active channels state during the search
+    active_channels: Set[Tuple[str, str]] = Field(default_factory=set, exclude=True)
 
 
 # --- Main Graph & History Models ---

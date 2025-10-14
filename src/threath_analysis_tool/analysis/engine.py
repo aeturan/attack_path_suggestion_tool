@@ -1,4 +1,3 @@
-# analysis/engine.py
 from collections import deque
 from typing import Dict, List, Optional
 
@@ -82,7 +81,15 @@ class GraphAnalysis:
                         
                         steps = []
                         for i in range(len(new_path) - 1):
-                            action = Action(source_id=new_path[i], edge_type="comm", target_id=new_path[i+1])
+                            source_node_id = new_path[i]
+                            target_node_id = new_path[i+1]
+                            
+                            # --- FIX: Look up the actual edge type from the graph ---
+                            edge = self.graph.get_edge(source_node_id, target_node_id)
+                            # Default to 'unknown' if edge not found, though this shouldn't happen
+                            edge_type = edge.type if edge else "unknown" 
+                            
+                            action = Action(source_id=source_node_id, edge_type=edge_type, target_id=target_node_id)
                             step = AttackStep(
                                 push_poison_action=action,
                                 target_actor_id=action.target_id,
