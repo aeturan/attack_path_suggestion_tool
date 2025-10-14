@@ -67,7 +67,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
         found_plans = []
         visited = set()
 
-        while pq:
+        while pq and len(found_plans) < num_paths:
             _, g_cost, plan, last_compromised_actor_id, compromised_state_fs, active_channels = heapq.heappop(pq)[1:]
             compromised_edges_by_actor = dict(compromised_state_fs)
 
@@ -88,6 +88,9 @@ class StrategicPlannerStrategy(PathfindingStrategy):
             actor_id = last_compromised_actor_id
             for target_id in graph_analysis.poison_graph.get(actor_id, []):
                 
+                if target_id == attacker_id:
+                    continue
+
                 if target_id == graph_analysis.ASSETS_NODE_ID:
                     if actor_id != victim_id: continue
 
@@ -155,17 +158,12 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
                     new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
                     
-                    # --- THIS IS THE CRITICAL FIX ---
                     new_active_channels = active_channels
                     if original_edge.type == "communicate":
-                        # A communicate action from A->B opens a channel for B to respond to A. Key is (B, A).
                         new_active_channels = active_channels.union({(target_id, actor_id)})
                     elif original_edge.type == "respond":
-                        # A respond action from A->B consumes the channel. Key is (A, B).
                         activation_key_to_consume = (actor_id, target_id)
                         new_active_channels = active_channels.difference({activation_key_to_consume})
-                    # --- END CRITICAL FIX ---
-
 
                 else: # This is a write/read hop
                     read_edge = next((r for r in graph_analysis.graph.edges if r.type == "read" and r.target == target_id and any(w.source == actor_id and w.target == r.source for w in graph_analysis.graph.edges if w.type == "write")), None)
@@ -186,13 +184,33 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     
                     if best_trigger is None: continue
 
+                    new_active_channels = active_channels
+                    if best_trigger:
+                        for trigger_step in best_trigger.steps:
+                            trigger_action = trigger_step.push_poison_action
+                            if trigger_action.edge_type == 'communicate':
+                                new_active_channels = new_active_channels.union({
+                                    (trigger_action.target_id, trigger_action.source_id)
+                                })
+
+                    final_trigger = best_trigger.model_copy(deep=True)
+                    if final_trigger:
+                        read_action = Action(source_id=datasource_id, edge_type='read', target_id=target_id)
+                        read_step = AttackStep(
+                            push_poison_action=read_action,
+                            target_actor_id=target_id,
+                            compromise_edge=compromise_edge,
+                            total_step_cost=1
+                        )
+                        final_trigger.steps.append(read_step)
+                        final_trigger.cost += 1
+
                     write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
-                    write_step = AttackStep(push_poison_action=write_action, target_actor_id=target_id, compromise_edge=compromise_edge, consumption_trigger=best_trigger, total_step_cost=1 + best_trigger.cost)
+                    write_step = AttackStep(push_poison_action=write_action, target_actor_id=target_id, compromise_edge=compromise_edge, consumption_trigger=final_trigger, total_step_cost=1 + final_trigger.cost)
                     new_attempt = Attempt(steps=[write_step], total_attempt_cost=attempt_cost + write_step.total_step_cost, summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via Datasource '{graph_analysis.graph.get_node(datasource_id).name}'.")
                     
                     new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
                     new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
-                    new_active_channels = active_channels # No change to channels for write/read
 
                 if new_attempt:
                     new_g_cost = g_cost + (new_attempt.total_attempt_cost - attempt_cost)
@@ -324,6 +342,31 @@ class GraphAnalysis:
     def find_attack_paths(self, strategy: PathfindingStrategy, num_paths: int, max_cost: int, attempt_cost: int) -> list[AttackPlan]:
         if not self.graph.attacker_id or not self.graph.victim_id: return []
         return strategy.find_paths(self, num_paths, max_cost, attempt_cost)
+    
+    # --- THIS IS THE CRITICAL FIX for the numbering bug ---
+    def _traverse_and_number_steps(self, step: AttackStep, counter: int, edge_labels: dict, h_edges: set) -> int:
+        """Recursively traverses an AttackStep tree in the correct order to assign numbers."""
+        
+        if step.edge_activation_trigger:
+            for sub_step in step.edge_activation_trigger.steps:
+                counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges)
+        
+        action = step.push_poison_action
+        if action.edge_type != 'self_trigger':
+            edge_key = (action.source_id, action.target_id)
+            edge_labels[edge_key].append(str(counter))
+            h_edges.add(edge_key)
+            counter += 1
+
+        if step.consumption_trigger:
+            for sub_step in step.consumption_trigger.steps:
+                counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges)
+        
+        # REMOVED the special case for 'write' here. The read action is now part of the 
+        # consumption_trigger's steps and will be handled by the recursive call above.
+            
+        return counter
+    # --- END CRITICAL FIX ---
 
     def generate_mermaid_code(self, highlight_path: AttackPlan | None = None) -> str:
         lines = ["graph TD"]
@@ -331,30 +374,10 @@ class GraphAnalysis:
         edge_labels = defaultdict(list)
         h_edges = set()
         if highlight_path:
-            flat_actions = []
+            execution_order = 1
             all_plan_steps = [step for attempt in highlight_path.attempts for step in attempt.steps]
             for step in all_plan_steps:
-                trigger = step.edge_activation_trigger or step.consumption_trigger
-                if trigger:
-                    flat_actions.extend([ts.push_poison_action for ts in trigger.steps])
-                flat_actions.append(step.push_poison_action)
-                if step.push_poison_action.edge_type == 'write':
-                    read_action = Action(
-                        source_id=step.push_poison_action.target_id,
-                        edge_type='read',
-                        target_id=step.target_actor_id
-                    )
-                    flat_actions.append(read_action)
-
-            execution_order = 1
-            for action in flat_actions:
-                if action.edge_type == 'self_trigger':
-                    continue
-                
-                edge_key = (action.source_id, action.target_id)
-                edge_labels[edge_key].append(str(execution_order))
-                h_edges.add(edge_key)
-                execution_order += 1
+                execution_order = self._traverse_and_number_steps(step, execution_order, edge_labels, h_edges)
 
         for node in self.graph.nodes:
             shape, label = (("([", "])"), node.name) if isinstance(node, Actor) else (("[(", ")]"), node.name)

@@ -16,8 +16,6 @@ from ui_commands import (
     DeleteEdgeCommand, DeleteNodeCommand, EditNodeCommand, SetRoleCommand
 )
 
-# ... (Helper functions and UI components from render_sidebar to render_delete_edge_workflow are unchanged) ...
-
 def execute_command(command):
     st.session_state.history.execute(command)
     save_current_session()
@@ -241,9 +239,6 @@ def render_analysis_controls():
             plans = find_attack_paths_cached(st.session_state.graph, StrategicPlannerStrategy(), num_paths, max_cost, 0)
             st.session_state.attack_paths, st.session_state.selected_path_index = plans, 0 if plans else None; st.rerun()
 
-
-# --- FINAL RECURSIVE RENDERER ---
-
 def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_sub_step: bool = False, start_index: int = 1):
     """A recursive helper function to render a list of AttackSteps."""
     for k, step in enumerate(steps):
@@ -267,25 +262,22 @@ def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_su
                     st.caption(f"Required to activate conditional edge (Cost: {step.edge_activation_trigger.cost})")
                     _render_attack_steps(step.edge_activation_trigger.steps, get_name_func, is_sub_step=True)
             else:
-                # --- THIS IS THE CRITICAL FIX ---
-                # Provide a context-aware message for why a trigger is not needed.
                 if action.edge_type == 'respond':
-                    # Find the step that activated this channel
                     activator_step_index = -1
-                    for i in range(k - 1, -1, -1):
-                        prev_step_action = steps[i].push_poison_action
-                        if (prev_step_action.source_id == step.target_actor_id and
-                            prev_step_action.target_id == action.source_id and
-                            prev_step_action.edge_type == 'communicate'):
-                            activator_step_index = i + 1
-                            break
+                    if not is_sub_step:
+                        for i in range(k - 1, -1, -1):
+                            prev_step_action = steps[i].push_poison_action
+                            if (prev_step_action.source_id == step.target_actor_id and
+                                prev_step_action.target_id == action.source_id and
+                                prev_step_action.edge_type == 'communicate'):
+                                activator_step_index = i + 1
+                                break
                     if activator_step_index != -1:
                         st.caption(f"Not needed: The respond channel was already activated by **Step {activator_step_index}**.")
                     else:
                         st.caption("Not needed: The respond channel was pre-activated.")
                 else:
                     st.caption("Not needed: The main action is not conditional.")
-                # --- END CRITICAL FIX ---
 
             st.write(f"**2. Push Poison**")
             st.markdown(f"> {get_name_func(action.source_id)} `—({action.edge_type})→` {get_name_func(action.target_id)}")
@@ -300,6 +292,12 @@ def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_su
                     st.caption("Not needed: The communication action is its own trigger.")
                 else:
                     st.caption("Not needed for this step.")
+
+            if action.edge_type == 'write':
+                st.write("**4. Poison Consumption**")
+                read_source = get_name_func(action.target_id)
+                read_target = get_name_func(step.target_actor_id)
+                st.markdown(f"> The activated {read_target} consumes the poison by performing a `read` from {read_source}.")
 
 def render_attack_path_results():
     if 'attack_paths' not in st.session_state or not st.session_state.attack_paths:
@@ -324,7 +322,7 @@ def render_attack_path_results():
         )
     
     for i, plan in enumerate(st.session_state.attack_paths):
-        with st.expander(f"Attack Plan {i+1} (Total Cost: {plan.total_cost})", expanded=False):
+        with st.expander(f"Attack Plan {i+1} (Total Cost: {plan.total_cost}, Attempts: {len(plan.attempts)})", expanded=False):
             
             all_steps = []
             if plan.attempts:
