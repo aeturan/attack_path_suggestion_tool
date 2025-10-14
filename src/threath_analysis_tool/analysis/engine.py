@@ -139,12 +139,11 @@ class GraphAnalysis:
                     queue.append(neighbor)
         return distances
 
-    def find_attack_paths(self, strategy: PathfindingStrategy, num_paths: int, max_cost: int, attempt_cost: int) -> list[AttackPlan]:
+    def find_attack_paths(self, strategy: PathfindingStrategy, num_paths: int, max_cost: int) -> list[AttackPlan]:
         if not self.graph.attacker_id or not self.graph.victim_id: return []
-        return strategy.find_paths(self, num_paths, max_cost, attempt_cost)
-
+        return strategy.find_paths(self, num_paths, max_cost)
 
 @st.cache_data(hash_funcs={GraphAnalysis: lambda g: g.graph.model_dump_json()})
-def find_attack_paths_cached(_graph: Graph, _strategy: PathfindingStrategy, num_paths: int, max_cost: int, attempt_cost: int) -> list[AttackPlan]:
+def find_attack_paths_cached(_graph: Graph, _strategy: PathfindingStrategy, num_paths: int, max_cost: int) -> list[AttackPlan]:
     analysis_engine = GraphAnalysis(_graph)
-    return analysis_engine.find_attack_paths(_strategy, num_paths, max_cost, attempt_cost)
+    return analysis_engine.find_attack_paths(_strategy, num_paths, max_cost)

@@ -37,7 +37,6 @@ class PathfindingStrategy(ABC):
         graph_analysis: "GraphAnalysis",
         num_paths: int,
         max_cost: int,
-        attempt_cost: int,
     ) -> List[AttackPlan]:
         pass
 
@@ -47,7 +46,6 @@ class StrategicPlannerStrategy(PathfindingStrategy):
         graph_analysis: "GraphAnalysis",
         num_paths: int,
         max_cost: int,
-        attempt_cost: int,
     ) -> List[AttackPlan]:
 
         attacker_id = graph_analysis.graph.attacker_id
@@ -113,7 +111,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     )
                     new_attempt = Attempt(
                         steps=[step],
-                        total_attempt_cost=attempt_cost + 1,
+                        total_attempt_cost=1,
                         summary=f"Compromise Assets via '{graph_analysis.graph.get_node(actor_id).name}'."
                     )
                     
@@ -171,7 +169,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     
                     step_cost = 1 + activation_cost
                     step = AttackStep(push_poison_action=push_action, target_actor_id=target_id, compromise_edge=compromise_edge, edge_activation_trigger=edge_trigger, total_step_cost=step_cost)
-                    new_attempt = Attempt(steps=[step], total_attempt_cost=attempt_cost + step_cost, summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via direct communication.")
+                    new_attempt = Attempt(steps=[step], total_attempt_cost=step_cost, summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via direct communication.")
                     
                     new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
                     new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
@@ -206,7 +204,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
 
                     write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
                     write_step = AttackStep(push_poison_action=write_action, target_actor_id=target_id, compromise_edge=compromise_edge, consumption_trigger=final_trigger, total_step_cost=1 + final_trigger.cost)
-                    new_attempt = Attempt(steps=[write_step], total_attempt_cost=attempt_cost + write_step.total_step_cost, summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via Datasource '{graph_analysis.graph.get_node(datasource_id).name}'.")
+                    new_attempt = Attempt(steps=[write_step], total_attempt_cost=write_step.total_step_cost, summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via Datasource '{graph_analysis.graph.get_node(datasource_id).name}'.")
                     
                     new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
                     new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})

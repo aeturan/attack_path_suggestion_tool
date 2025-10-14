@@ -233,7 +233,7 @@ def render_analysis_controls():
     if st.button("Generate Attack Plans", type="primary", use_container_width=True,
         disabled=not (st.session_state.graph.attacker_id and st.session_state.graph.victim_id)):
         with st.spinner("Analyzing graph..."):
-            plans = find_attack_paths_cached(st.session_state.graph, StrategicPlannerStrategy(), num_paths, max_cost, 0)
+            plans = find_attack_paths_cached(st.session_state.graph, StrategicPlannerStrategy(), num_paths, max_cost)
             st.session_state.attack_paths, st.session_state.selected_path_index = plans, 0 if plans else None; st.rerun()
 
 def render_about_model():
