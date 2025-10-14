@@ -103,13 +103,14 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                         compromise_edge=compromise_edge,
                         total_step_cost=1
                     )
+                    # The penalty is now passed in as `attempt_cost` (which will be 0)
                     new_attempt = Attempt(
                         steps=[step],
                         total_attempt_cost=attempt_cost + 1,
                         summary=f"Compromise Assets via '{graph_analysis.graph.get_node(actor_id).name}'."
                     )
                     
-                    new_g_cost = g_cost + new_attempt.total_attempt_cost
+                    new_g_cost = g_cost + step.total_step_cost # Use step cost for plan cost
                     new_plan = AttackPlan(attempts=plan.attempts + [new_attempt], total_cost=new_g_cost)
                     
                     new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
@@ -174,7 +175,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                             cheapest_trigger_cost = trigger_chain.cost
                             best_trigger = trigger_chain
                     
-                    if best_trigger is None: continue # Changed from `not best_trigger` to handle cost=0 case
+                    if best_trigger is None: continue
 
                     write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
                     write_step = AttackStep(push_poison_action=write_action, target_actor_id=target_id, compromise_edge=compromise_edge, consumption_trigger=best_trigger, total_step_cost=1 + best_trigger.cost)
@@ -182,7 +183,8 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
 
                 if new_attempt:
-                    new_g_cost = g_cost + new_attempt.total_attempt_cost
+                    # Use the step's actual cost for the plan's total cost
+                    new_g_cost = g_cost + (new_attempt.total_attempt_cost - attempt_cost)
                     new_plan = AttackPlan(attempts=plan.attempts + [new_attempt], total_cost=new_g_cost)
                     
                     h_cost = graph_analysis.poison_heuristic.get(target_id, 999)
@@ -230,7 +232,6 @@ class GraphAnalysis:
             all_nodes.update(targets)
 
         for start_node in all_nodes:
-            # --- THIS IS THE CRITICAL FIX for the "Cost of Zero" bug ---
             node_obj = self.graph.get_node(start_node)
             has_self_trigger = isinstance(node_obj, Actor) and any(isinstance(t, SelfTrigger) for t in node_obj.triggers)
             
@@ -245,7 +246,6 @@ class GraphAnalysis:
                 routing_table[start_node] = {start_node: TriggerChain(steps=[step], cost=1)}
             else:
                 routing_table[start_node] = {start_node: TriggerChain(steps=[], cost=0)}
-            # --- END CRITICAL FIX ---
 
             queue = deque([[start_node]])
             visited = {start_node}

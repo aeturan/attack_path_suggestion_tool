@@ -63,7 +63,7 @@ class TriggerChain(BaseModel):
 class AttackStep(BaseModel):
     push_poison_action: Action
     target_actor_id: str
-    compromise_edge: Tuple[str, str] # FINAL FIX: The specific edge used for the final compromise.
+    compromise_edge: Tuple[str, str]
     consumption_trigger: Optional[TriggerChain] = None
     edge_activation_trigger: Optional[TriggerChain] = None
     total_step_cost: int

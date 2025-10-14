@@ -18,7 +18,7 @@
         {
           "type": "communication",
           "source_actor_id": "email_tool_826e",
-          "edge_type": "communicate"
+          "edge_type": "respond"
         }
       ]
     },
@@ -84,11 +84,6 @@
       "type": "communicate"
     },
     {
-      "source": "email_tool_826e",
-      "target": "car_agent_abe4",
-      "type": "communicate"
-    },
-    {
       "source": "car_agent_abe4",
       "target": "Long-term_memory_cc01",
       "type": "write"
@@ -97,6 +92,11 @@
       "source": "Long-term_memory_cc01",
       "target": "car_agent_abe4",
       "type": "read"
+    },
+    {
+      "source": "email_tool_826e",
+      "target": "car_agent_abe4",
+      "type": "respond"
     }
   ],
   "attacker_id": "attacker_0236",

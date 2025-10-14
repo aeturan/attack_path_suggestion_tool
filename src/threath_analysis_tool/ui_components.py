@@ -16,7 +16,7 @@ from ui_commands import (
     DeleteEdgeCommand, DeleteNodeCommand, EditNodeCommand, SetRoleCommand
 )
 
-# ... (All other functions in this file remain the same) ...
+# ... (Helper functions and UI components from render_sidebar to render_delete_edge_workflow are unchanged) ...
 
 def execute_command(command):
     st.session_state.history.execute(command)
@@ -226,7 +226,6 @@ def render_analysis_controls():
     st.subheader("Analysis Parameters")
     num_paths = st.number_input("Number of Paths to Find", 1, 50, APP_CONFIG.analysis.num_paths_to_find)
     max_cost = st.number_input("Max Attack Cost", 5, 100, APP_CONFIG.analysis.max_attack_cost)
-    attempt_cost = st.number_input("Attempt Cost", 0, 20, APP_CONFIG.analysis.attempt_cost, help="Penalty for each new independent sequence initiated by the attacker.")
     st.markdown("---")
     actor_opts = {n.id: n.name for n in st.session_state.graph.nodes if n.type == "Actor"}
     if not actor_opts: st.caption("Add actors to run an analysis."); return
@@ -239,7 +238,7 @@ def render_analysis_controls():
     if st.button("Generate Attack Plans", type="primary", use_container_width=True,
         disabled=not (st.session_state.graph.attacker_id and st.session_state.graph.victim_id)):
         with st.spinner("Analyzing graph..."):
-            plans = find_attack_paths_cached(st.session_state.graph, StrategicPlannerStrategy(), num_paths, max_cost, attempt_cost)
+            plans = find_attack_paths_cached(st.session_state.graph, StrategicPlannerStrategy(), num_paths, max_cost, 0)
             st.session_state.attack_paths, st.session_state.selected_path_index = plans, 0 if plans else None; st.rerun()
 
 
@@ -251,7 +250,6 @@ def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_su
         
         action = step.push_poison_action
         
-        # --- THE FIX: Create different titles based on the action type ---
         if action.edge_type == 'write':
             source_actor_id = action.source_id
             datasource_id = action.target_id
@@ -272,7 +270,8 @@ def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_su
                 st.caption("Not needed: The main action is not conditional.")
 
             st.write(f"**2. Push Poison**")
-            st.markdown(f"> The action **`{action.edge_type}`** from {get_name_func(action.source_id)} to {get_name_func(action.target_id)} pushes the poison.")
+            # --- THE FIX: Use direct edge notation ---
+            st.markdown(f"> {get_name_func(action.source_id)} `—({action.edge_type})→` {get_name_func(action.target_id)}")
             
             st.write("**3. Consumption Trigger**")
             if step.consumption_trigger:
@@ -292,6 +291,7 @@ def render_attack_path_results():
     st.write(f"Found **{len(st.session_state.attack_paths)}** potential attack plan(s).")
     
     graph = st.session_state.graph
+    attacker_id = graph.attacker_id
     def get_name(node_id):
         if node_id == "assets_node": return "**Assets**"
         node = graph.get_node(node_id)
@@ -308,10 +308,34 @@ def render_attack_path_results():
         )
     
     for i, plan in enumerate(st.session_state.attack_paths):
-        with st.expander(f"Attack Plan {i+1} (Total Cost: {plan.total_cost})", expanded=True):
+        # Deconstruct the plan into "Attempts" for the summary
+        attempts = []
+        if plan.attempts:
+            for sequence in plan.attempts:
+                step = sequence.steps[0]
+                if step.push_poison_action.source_id == attacker_id:
+                    summary = f"{get_name(step.push_poison_action.source_id)} `—({step.push_poison_action.edge_type})→` {get_name(step.push_poison_action.target_id)}"
+                    attempts.append(("Push Poison", summary))
+                
+                trigger = step.consumption_trigger or step.edge_activation_trigger
+                if trigger and trigger.steps and trigger.steps[0].push_poison_action.source_id == attacker_id:
+                    path_nodes = [get_name(s.push_poison_action.source_id) for s in trigger.steps] + [get_name(trigger.steps[-1].target_actor_id)]
+                    summary = " → ".join(path_nodes)
+                    attempts.append(("Trigger", summary))
+
+        with st.expander(f"Attack Plan {i+1} (Total Cost: {plan.total_cost}, Attempts: {len(attempts)})", expanded=True):
             
+            st.markdown("---")
+            st.markdown("**Red Teamer's Actions (Attempts)**")
+            if not attempts:
+                st.caption("This attack plan unfolds as a direct chain reaction with no new actions required from the attacker.")
+            else:
+                for k, (attempt_type, summary) in enumerate(attempts):
+                    st.markdown(f"* **Attempt {k+1} ({attempt_type}):** {summary}")
+            st.markdown("---")
+
             all_steps = []
-            if plan.attempts: # Gracefully handle potentially empty plans
+            if plan.attempts:
                 for sequence in plan.attempts:
                     all_steps.extend(sequence.steps)
 
