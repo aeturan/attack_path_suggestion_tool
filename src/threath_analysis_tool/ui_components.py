@@ -287,17 +287,18 @@ def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_su
                 with st.container(border=True):
                     st.caption(f"Required to make the target consume the poison (Cost: {step.consumption_trigger.cost})")
                     _render_attack_steps(step.consumption_trigger.steps, get_name_func, is_sub_step=True)
+                    
+                    # --- FINAL FIX: Move consumption text inside the trigger block ---
+                    if action.edge_type == 'write':
+                        read_source = get_name_func(action.target_id)
+                        read_target = get_name_func(step.target_actor_id)
+                        st.markdown(f"↳ *This trigger chain results in {read_target} consuming the poison by performing a `read` from {read_source}.*")
+
             else:
                 if action.edge_type in ["communicate", "respond"]:
                     st.caption("Not needed: The communication action is its own trigger.")
                 else:
                     st.caption("Not needed for this step.")
-
-            if action.edge_type == 'write':
-                st.write("**4. Poison Consumption**")
-                read_source = get_name_func(action.target_id)
-                read_target = get_name_func(step.target_actor_id)
-                st.markdown(f"> The activated {read_target} consumes the poison by performing a `read` from {read_source}.")
 
 def render_attack_path_results():
     if 'attack_paths' not in st.session_state or not st.session_state.attack_paths:
