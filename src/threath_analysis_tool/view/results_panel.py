@@ -1,8 +1,25 @@
-# view/results_panel.py
 from typing import List
 import streamlit as st
 
 from domain import AttackStep
+
+
+def _count_attacker_turns(steps: List[AttackStep], attacker_id: str) -> int:
+    """Recursively traverses all steps in a plan to count actions initiated by the attacker."""
+    count = 0
+    if not attacker_id:
+        return 0
+    for step in steps:
+        # Count the current step if the source is the attacker
+        if step.push_poison_action.source_id == attacker_id:
+            count += 1
+        # Recurse into the edge activation trigger if it exists
+        if step.edge_activation_trigger:
+            count += _count_attacker_turns(step.edge_activation_trigger.steps, attacker_id)
+        # Recurse into the consumption trigger if it exists
+        if step.consumption_trigger:
+            count += _count_attacker_turns(step.consumption_trigger.steps, attacker_id)
+    return count
 
 
 def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_sub_step: bool = False, start_index: int = 1):
@@ -54,7 +71,6 @@ def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_su
                     st.caption(f"Required to make the target consume the poison (Cost: {step.consumption_trigger.cost})")
                     _render_attack_steps(step.consumption_trigger.steps, get_name_func, is_sub_step=True)
                     
-                    # --- FINAL FIX: Move consumption text inside the trigger block ---
                     if action.edge_type == 'write':
                         read_source = get_name_func(action.target_id)
                         read_target = get_name_func(step.target_actor_id)
@@ -89,13 +105,15 @@ def render_attack_path_results():
         )
     
     for i, plan in enumerate(st.session_state.attack_paths):
-        with st.expander(f"Attack Plan {i+1} (Total Cost: {plan.total_cost}, Attempts: {len(plan.attempts)})", expanded=False):
-            
-            all_steps = []
-            if plan.attempts:
-                for sequence in plan.attempts:
-                    all_steps.extend(sequence.steps)
-
+        # Flatten all steps from all attempts to calculate the total turns
+        all_steps = [step for attempt in plan.attempts for step in attempt.steps]
+        attacker_id = st.session_state.graph.attacker_id
+        turns = _count_attacker_turns(all_steps, attacker_id)
+        
+        # Construct the new title with "Turns"
+        expander_title = f"Attack Plan {i+1} (Total Cost: {plan.total_cost}, Turns: {turns})"
+        
+        with st.expander(expander_title, expanded=False):
             if all_steps:
                 _render_attack_steps(all_steps, get_name)
             else:
