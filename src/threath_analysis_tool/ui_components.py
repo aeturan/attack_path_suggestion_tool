@@ -267,10 +267,27 @@ def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_su
                     st.caption(f"Required to activate conditional edge (Cost: {step.edge_activation_trigger.cost})")
                     _render_attack_steps(step.edge_activation_trigger.steps, get_name_func, is_sub_step=True)
             else:
-                st.caption("Not needed: The main action is not conditional.")
+                # --- THIS IS THE CRITICAL FIX ---
+                # Provide a context-aware message for why a trigger is not needed.
+                if action.edge_type == 'respond':
+                    # Find the step that activated this channel
+                    activator_step_index = -1
+                    for i in range(k - 1, -1, -1):
+                        prev_step_action = steps[i].push_poison_action
+                        if (prev_step_action.source_id == step.target_actor_id and
+                            prev_step_action.target_id == action.source_id and
+                            prev_step_action.edge_type == 'communicate'):
+                            activator_step_index = i + 1
+                            break
+                    if activator_step_index != -1:
+                        st.caption(f"Not needed: The respond channel was already activated by **Step {activator_step_index}**.")
+                    else:
+                        st.caption("Not needed: The respond channel was pre-activated.")
+                else:
+                    st.caption("Not needed: The main action is not conditional.")
+                # --- END CRITICAL FIX ---
 
             st.write(f"**2. Push Poison**")
-            # --- THE FIX: Use direct edge notation ---
             st.markdown(f"> {get_name_func(action.source_id)} `—({action.edge_type})→` {get_name_func(action.target_id)}")
             
             st.write("**3. Consumption Trigger**")
@@ -291,7 +308,6 @@ def render_attack_path_results():
     st.write(f"Found **{len(st.session_state.attack_paths)}** potential attack plan(s).")
     
     graph = st.session_state.graph
-    attacker_id = graph.attacker_id
     def get_name(node_id):
         if node_id == "assets_node": return "**Assets**"
         node = graph.get_node(node_id)
@@ -308,32 +324,8 @@ def render_attack_path_results():
         )
     
     for i, plan in enumerate(st.session_state.attack_paths):
-        # Deconstruct the plan into "Attempts" for the summary
-        attempts = []
-        if plan.attempts:
-            for sequence in plan.attempts:
-                step = sequence.steps[0]
-                if step.push_poison_action.source_id == attacker_id:
-                    summary = f"{get_name(step.push_poison_action.source_id)} `—({step.push_poison_action.edge_type})→` {get_name(step.push_poison_action.target_id)}"
-                    attempts.append(("Push Poison", summary))
-                
-                trigger = step.consumption_trigger or step.edge_activation_trigger
-                if trigger and trigger.steps and trigger.steps[0].push_poison_action.source_id == attacker_id:
-                    path_nodes = [get_name(s.push_poison_action.source_id) for s in trigger.steps] + [get_name(trigger.steps[-1].target_actor_id)]
-                    summary = " → ".join(path_nodes)
-                    attempts.append(("Trigger", summary))
-
-        with st.expander(f"Attack Plan {i+1} (Total Cost: {plan.total_cost}, Attempts: {len(attempts)})", expanded=True):
+        with st.expander(f"Attack Plan {i+1} (Total Cost: {plan.total_cost})", expanded=False):
             
-            st.markdown("---")
-            st.markdown("**Red Teamer's Actions (Attempts)**")
-            if not attempts:
-                st.caption("This attack plan unfolds as a direct chain reaction with no new actions required from the attacker.")
-            else:
-                for k, (attempt_type, summary) in enumerate(attempts):
-                    st.markdown(f"* **Attempt {k+1} ({attempt_type}):** {summary}")
-            st.markdown("---")
-
             all_steps = []
             if plan.attempts:
                 for sequence in plan.attempts:
