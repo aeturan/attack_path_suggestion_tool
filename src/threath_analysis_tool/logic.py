@@ -154,11 +154,23 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     step_cost = 1 + activation_cost
                     step = AttackStep(push_poison_action=push_action, target_actor_id=target_id, compromise_edge=compromise_edge, edge_activation_trigger=edge_trigger, total_step_cost=step_cost)
                     new_attempt = Attempt(steps=[step], total_attempt_cost=attempt_cost + step_cost, summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via direct communication.")
+                    
+                    new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
                     new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
+                    
+                    # --- THIS IS THE CRITICAL FIX ---
+                    new_active_channels = active_channels
                     if original_edge.type == "communicate":
+                        # A communicate action from A->B opens a channel for B to respond to A. Key is (B, A).
                         new_active_channels = active_channels.union({(target_id, actor_id)})
+                    elif original_edge.type == "respond":
+                        # A respond action from A->B consumes the channel. Key is (A, B).
+                        activation_key_to_consume = (actor_id, target_id)
+                        new_active_channels = active_channels.difference({activation_key_to_consume})
+                    # --- END CRITICAL FIX ---
 
-                else:
+
+                else: # This is a write/read hop
                     read_edge = next((r for r in graph_analysis.graph.edges if r.type == "read" and r.target == target_id and any(w.source == actor_id and w.target == r.source for w in graph_analysis.graph.edges if w.type == "write")), None)
                     if not read_edge: continue
                     
@@ -180,7 +192,10 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
                     write_step = AttackStep(push_poison_action=write_action, target_actor_id=target_id, compromise_edge=compromise_edge, consumption_trigger=best_trigger, total_step_cost=1 + best_trigger.cost)
                     new_attempt = Attempt(steps=[write_step], total_attempt_cost=attempt_cost + write_step.total_step_cost, summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via Datasource '{graph_analysis.graph.get_node(datasource_id).name}'.")
+                    
+                    new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
                     new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
+                    new_active_channels = active_channels # No change to channels for write/read
 
                 if new_attempt:
                     # Use the step's actual cost for the plan's total cost
