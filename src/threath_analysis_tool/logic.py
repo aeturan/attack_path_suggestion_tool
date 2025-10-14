@@ -4,7 +4,7 @@ Contains all business logic, algorithms, and data persistence operations.
 import heapq
 import itertools
 from abc import ABC, abstractmethod
-from collections import deque
+from collections import deque, defaultdict
 from typing import Dict, List, Optional, Set, Tuple, FrozenSet
 
 import streamlit as st
@@ -103,14 +103,13 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                         compromise_edge=compromise_edge,
                         total_step_cost=1
                     )
-                    # The penalty is now passed in as `attempt_cost` (which will be 0)
                     new_attempt = Attempt(
                         steps=[step],
                         total_attempt_cost=attempt_cost + 1,
                         summary=f"Compromise Assets via '{graph_analysis.graph.get_node(actor_id).name}'."
                     )
                     
-                    new_g_cost = g_cost + step.total_step_cost # Use step cost for plan cost
+                    new_g_cost = g_cost + step.total_step_cost
                     new_plan = AttackPlan(attempts=plan.attempts + [new_attempt], total_cost=new_g_cost)
                     
                     new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
@@ -124,9 +123,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
 
                 original_edge = graph_analysis.graph.get_edge(actor_id, target_id)
                 new_attempt = None
-                new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
-                new_active_channels = active_channels
-
+                
                 if original_edge and original_edge.type in ["communicate", "respond"]:
                     compromise_edge = (actor_id, target_id)
                     used_edges = compromised_edges_by_actor.get(target_id, frozenset())
@@ -136,7 +133,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     edge_trigger = None
                     activation_cost = 0
                     if original_edge.type == "respond":
-                        activation_key = (target_id, actor_id)
+                        activation_key = (actor_id, target_id)
                         if activation_key not in active_channels:
                             cheapest_activation_cost = float('inf')
                             best_activator = None
@@ -198,7 +195,6 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     new_active_channels = active_channels # No change to channels for write/read
 
                 if new_attempt:
-                    # Use the step's actual cost for the plan's total cost
                     new_g_cost = g_cost + (new_attempt.total_attempt_cost - attempt_cost)
                     new_plan = AttackPlan(attempts=plan.attempts + [new_attempt], total_cost=new_g_cost)
                     
@@ -330,38 +326,80 @@ class GraphAnalysis:
         return strategy.find_paths(self, num_paths, max_cost, attempt_cost)
 
     def generate_mermaid_code(self, highlight_path: AttackPlan | None = None) -> str:
-        lines, h_nodes, h_edges = ["graph TD"], set(), set()
+        lines = ["graph TD"]
+        
+        edge_labels = defaultdict(list)
+        h_edges = set()
         if highlight_path:
-            for attempt in highlight_path.attempts:
-                for step in attempt.steps:
-                    action = step.push_poison_action
-                    h_nodes.update([action.source_id, action.target_id])
-                    h_edges.add(tuple(sorted((action.source_id, action.target_id))))
+            flat_actions = []
+            all_plan_steps = [step for attempt in highlight_path.attempts for step in attempt.steps]
+            for step in all_plan_steps:
+                trigger = step.edge_activation_trigger or step.consumption_trigger
+                if trigger:
+                    flat_actions.extend([ts.push_poison_action for ts in trigger.steps])
+                flat_actions.append(step.push_poison_action)
+                if step.push_poison_action.edge_type == 'write':
+                    read_action = Action(
+                        source_id=step.push_poison_action.target_id,
+                        edge_type='read',
+                        target_id=step.target_actor_id
+                    )
+                    flat_actions.append(read_action)
+
+            execution_order = 1
+            for action in flat_actions:
+                if action.edge_type == 'self_trigger':
+                    continue
+                
+                edge_key = (action.source_id, action.target_id)
+                edge_labels[edge_key].append(str(execution_order))
+                h_edges.add(edge_key)
+                execution_order += 1
+
         for node in self.graph.nodes:
             shape, label = (("([", "])"), node.name) if isinstance(node, Actor) else (("[(", ")]"), node.name)
             if isinstance(node, Actor):
                 inds = "".join(["🔄" if any(isinstance(t,SelfTrigger) for t in node.triggers) else "","🔔" if any(isinstance(t,DatasourceTrigger) for t in node.triggers) else ""])
                 if inds: label = f"{node.name} {inds}"
             lines.append(f'    {node.id}{shape[0]}"{label}"{shape[1]}')
-            if   node.id == self.graph.attacker_id: lines.append(f"    style {node.id} fill:#ffadad,stroke:#ff5959,stroke-width:2px")
-            elif node.id == self.graph.victim_id:   lines.append(f"    style {node.id} fill:#ffd6a5,stroke:#ff9f43,stroke-width:2px")
-            elif node.id in h_nodes:              lines.append(f"    style {node.id} fill:#caffbf,stroke:#80ed99,stroke-width:2px")
-        arrows = {"write": "-- write -->","read": "-- read -->","communicate": "-- comm -->","respond": "-. resp .->"}
+            if node.id == self.graph.attacker_id: lines.append(f"    style {node.id} fill:#ffadad,stroke:#ff5959,stroke-width:2px")
+            elif node.id == self.graph.victim_id: lines.append(f"    style {node.id} fill:#ffd6a5,stroke:#ff9f43,stroke-width:2px")
+
+        edge_display_text = {"write": "write","read": "read","communicate": "comm","respond": "resp"}
+        arrow_templates = {
+            "write": "-- {text} -->",
+            "read": "-- {text} -->",
+            "communicate": "-- {text} -->",
+            "respond": "-. {text} .->"
+        }
+
         for i, edge in enumerate(self.graph.edges):
-            arrow = arrows.get(edge.type, "-->")
-            lines.append(f"    {edge.source} {arrow} {edge.target}")
-            if tuple(sorted((edge.source, edge.target))) in h_edges:
-                lines.append(f"    linkStyle {i} stroke:#80ed99,stroke-width:4px")
+            edge_key = (edge.source, edge.target)
+            display_text = edge_display_text.get(edge.type, edge.type)
+            template = arrow_templates.get(edge.type, "-- {text} -->")
+
+            if edge_key in h_edges:
+                label_text = ",".join(sorted(edge_labels[edge_key], key=int))
+                full_label = f"{display_text} |{label_text}|"
+                arrow = template.format(text=full_label)
+                lines.append(f"    {edge.source} {arrow} {edge.target}")
+                lines.append(f"    linkStyle {i} stroke:#80ed99,stroke-width:3px")
+            else:
+                arrow = template.format(text=display_text)
+                lines.append(f"    {edge.source} {arrow} {edge.target}")
+        
         if self.graph.victim_id:
             lines.append(f'    {self.ASSETS_NODE_ID}(("Assets"))')
-            lines.append(f"    {self.graph.victim_id} -- exploit --> {self.ASSETS_NODE_ID}")
-            exploit_idx = len(self.graph.edges)
-            if self.ASSETS_NODE_ID in h_nodes:
-                lines.append(f"    style {self.ASSETS_NODE_ID} fill:#caffbf,stroke:#80ed99,stroke-width:4px")
-                lines.append(f"    linkStyle {exploit_idx} stroke:#80ed99,stroke-width:4px")
-            else:
+            exploit_edge_key = (self.graph.victim_id, self.ASSETS_NODE_ID)
+            if exploit_edge_key in h_edges:
+                label_text = ",".join(sorted(edge_labels[exploit_edge_key], key=int))
+                arrow = f'-- exploit |{label_text}| -->'
+                lines.append(f"    {self.graph.victim_id} {arrow} {self.ASSETS_NODE_ID}")
+                lines.append(f"    linkStyle {len(self.graph.edges)} stroke:#80ed99,stroke-width:4px")
                 lines.append(f"    style {self.ASSETS_NODE_ID} fill:#ffd6a5,stroke:#ff9f43,stroke-width:4px")
-                lines.append(f"    linkStyle {exploit_idx} stroke:red,stroke-width:4px")
+            else:
+                lines.append(f"    {self.graph.victim_id} -- exploit --> {self.ASSETS_NODE_ID}")
+
         return "\n".join(lines)
     
     def render_mermaid(self, mermaid_code: str):
