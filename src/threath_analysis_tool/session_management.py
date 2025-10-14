@@ -1,6 +1,5 @@
 import json
 import streamlit as st
-from pathlib import Path
 from domain import CommandHistory, Graph
 from config import APP_CONFIG
 

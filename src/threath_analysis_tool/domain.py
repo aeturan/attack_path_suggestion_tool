@@ -3,7 +3,7 @@ Contains all data structures and domain models for the application.
 """
 import uuid
 from abc import ABC, abstractmethod
-from typing import Dict, List, Literal, Optional, Union, Tuple
+from typing import List, Literal, Optional, Union, Tuple
 
 from pydantic import BaseModel, Field
 

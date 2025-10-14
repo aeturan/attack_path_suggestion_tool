@@ -1,8 +1,8 @@
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from domain import (
     Actor, Command, CommunicationTrigger, Datasource, DatasourceTrigger,
-    Edge, Graph, Node, SelfTrigger, Trigger
+    Edge, Graph, SelfTrigger
 )
 
 
