@@ -76,13 +76,17 @@ class GraphRenderer:
         
         if self.graph.victim_id:
             lines.append(f'    {self.ASSETS_NODE_ID}(("Assets"))')
+            # Unconditionally style the Assets node orange whenever a victim is selected.
+            lines.append(f"    style {self.ASSETS_NODE_ID} fill:#ffd6a5,stroke:#ff9f43,stroke-width:2px")
+            
             exploit_edge_key = (self.graph.victim_id, self.ASSETS_NODE_ID)
             if exploit_edge_key in h_edges:
                 label_text = ",".join(sorted(edge_labels[exploit_edge_key], key=int))
                 arrow = f'-- exploit |{label_text}| -->'
                 lines.append(f"    {self.graph.victim_id} {arrow} {self.ASSETS_NODE_ID}")
                 lines.append(f"    linkStyle {len(self.graph.edges)} stroke:#80ed99,stroke-width:4px")
-                lines.append(f"    style {self.ASSETS_NODE_ID} fill:#ffd6a5,stroke:#ff9f43,stroke-width:4px")
+                # Thicken the border only when it's part of a highlighted path.
+                lines.append(f"    style {self.ASSETS_NODE_ID} stroke-width:4px")
             else:
                 lines.append(f"    {self.graph.victim_id} -- exploit --> {self.ASSETS_NODE_ID}")
 
@@ -91,6 +95,24 @@ class GraphRenderer:
     def render_mermaid(self, mermaid_code: str):
         html_code = f"""
         <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-        <script>mermaid.initialize({{'startOnLoad': true, 'theme': 'base', 'themeVariables': {{'primaryColor': '#F0F2F6', 'primaryTextColor': '#262730'}}}});</script>
-        <div class="mermaid">{mermaid_code}</div>"""
+        <script>
+            mermaid.initialize({{
+                'startOnLoad': true,
+                'theme': 'base',
+                'themeVariables': {{
+                    'primaryColor': '#F0F2F6',
+                    'primaryTextColor': '#262730'
+                }}
+            }});
+        </script>
+        <div class="mermaid">
+        %%{{init: {{
+        "flowchart": {{
+            "defaultRenderer": "elk",
+            "wrappingWidth": 100,
+        }}
+        }}}}%%
+        {mermaid_code}
+        </div>"""
         components.html(html_code, height=800, scrolling=True)
+
