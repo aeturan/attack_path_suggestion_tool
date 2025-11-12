@@ -13,18 +13,25 @@ class GraphRenderer:
         self.graph = graph
 
     def _traverse_and_number_steps(self, step: AttackStep, counter: int, edge_labels: dict, h_edges: set) -> int:
-        """Recursively traverses an AttackStep tree in the correct order to assign numbers."""
+        """Recursively traverses an AttackStep tree in the correct order to assign numbers, skipping only invisible trigger events (not edges)."""
+        # First, handle edge activation triggers (these may be invisible, e.g., datasource-watching)
         if step.edge_activation_trigger:
             for sub_step in step.edge_activation_trigger.steps:
+                # Do NOT increment counter for invisible trigger events (i.e., not an edge)
                 counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges)
-        
+
         action = step.push_poison_action
+        # Only number and highlight edges that actually exist in the graph (visible edges).
+        # This avoids numbering invisible trigger events (like datasource-watch activations) and self-triggers.
         if action.edge_type != 'self_trigger':
             edge_key = (action.source_id, action.target_id)
-            edge_labels[edge_key].append(str(counter))
-            h_edges.add(edge_key)
-            counter += 1
+            # Only label if the graph contains a corresponding edge
+            if self.graph.get_edge(action.source_id, action.target_id) is not None:
+                edge_labels[edge_key].append(str(counter))
+                h_edges.add(edge_key)
+                counter += 1
 
+        # For consumption triggers, recurse as usual (do not increment counter for invisible triggers)
         if step.consumption_trigger:
             for sub_step in step.consumption_trigger.steps:
                 counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges)
