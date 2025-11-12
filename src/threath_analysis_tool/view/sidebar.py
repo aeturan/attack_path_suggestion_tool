@@ -90,8 +90,6 @@ def render_sidebar():
         st.header("Analysis Controls")
         render_analysis_controls()
         st.markdown("---")
-        with st.expander("About the Attack Model", expanded=st.session_state.about_expander_state):
-            render_about_model()
 
 def render_add_node_form():
     st.subheader("Add Node")
