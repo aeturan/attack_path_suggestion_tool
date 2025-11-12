@@ -22,7 +22,7 @@
         },
         {
           "type": "communication",
-          "source_actor_id": "Human_Driver_6a80",
+          "source_actor_id": "Human_Driver_863c",
           "edge_type": "communicate"
         }
       ]
@@ -62,21 +62,12 @@
       "type": "Datasource"
     },
     {
-      "id": "Infotainment_Screen_1d6b",
-      "name": "Infotainment Screen",
-      "type": "Datasource"
-    },
-    {
-      "id": "Human_Driver_6a80",
+      "id": "Human_Driver_863c",
       "name": "Human Driver",
       "type": "Actor",
       "triggers": [
         {
           "type": "self"
-        },
-        {
-          "type": "datasource",
-          "datasource_id": "Infotainment_Screen_1d6b"
         },
         {
           "type": "communication",
@@ -128,24 +119,14 @@
       "type": "respond"
     },
     {
-      "source": "car_agent_abe4",
-      "target": "Human_Driver_6a80",
-      "type": "communicate"
-    },
-    {
-      "source": "Human_Driver_6a80",
+      "source": "Human_Driver_863c",
       "target": "car_agent_abe4",
       "type": "communicate"
     },
     {
-      "source": "Infotainment_Screen_1d6b",
-      "target": "Human_Driver_6a80",
-      "type": "read"
-    },
-    {
       "source": "car_agent_abe4",
-      "target": "Infotainment_Screen_1d6b",
-      "type": "write"
+      "target": "Human_Driver_863c",
+      "type": "communicate"
     }
   ],
   "attacker_id": "attacker_0236",
