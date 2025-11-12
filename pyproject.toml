@@ -1,7 +1,7 @@
 [project]
 name = "threath-analysis-tool"
 version = "0.1.0"
-description = "Add your description here"
+description = "Threat Analysis Tool for Attack Pathfinding and Visualization"
 readme = "README.md"
 authors = [
     { name = "Ahmet Erkan Turan", email = "erkan.turan@tum.de" }
@@ -10,11 +10,9 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.11.10",
     "pydantic-settings>=2.11.0",
+    "pytest>=9.0.1",
     "streamlit>=1.50.0",
 ]
-
-[project.scripts]
-threath-analysis-tool = "threath_analysis_tool:main"
 
 [build-system]
 requires = ["uv_build>=0.8.6,<0.9.0"]
