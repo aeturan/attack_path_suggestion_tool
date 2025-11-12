@@ -1,5 +1,5 @@
 [project]
-name = "threath-analysis-tool"
+name = "attack_path_suggestion_tool"
 version = "0.1.0"
 description = "Threat Analysis Tool for Attack Pathfinding and Visualization"
 readme = "README.md"
