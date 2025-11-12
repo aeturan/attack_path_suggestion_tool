@@ -22,7 +22,7 @@ from attack_path_suggestion_tool.view.content import ABOUT_MODEL_TEXT
 def render_sidebar():
     with st.sidebar:
         st.header("Session Management")
-        if "add_expander_state" not in st.session_state: st.session_state.add_expander_state = True
+        if "add_expander_state" not in st.session_state: st.session_state.add_expander_state = False
         if "manage_expander_state" not in st.session_state: st.session_state.manage_expander_state = False
         if "about_expander_state" not in st.session_state: st.session_state.about_expander_state = False
         if "confirming_delete" not in st.session_state: st.session_state.confirming_delete = False
