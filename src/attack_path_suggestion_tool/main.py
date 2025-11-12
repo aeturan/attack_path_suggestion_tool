@@ -3,12 +3,12 @@ The main entry point and presentation layer for the Streamlit application.
 """
 import streamlit as st
 
-from domain import CommandHistory
-from session_management import load_latest_session
-from view.content import ABOUT_MODEL_TEXT, GRAPH_LEGEND_TEXT
-from view.graph_renderer import GraphRenderer
-from view.results_panel import render_attack_path_results
-from view.sidebar import render_sidebar
+from attack_path_suggestion_tool.domain import CommandHistory
+from attack_path_suggestion_tool.session_management import load_latest_session
+from attack_path_suggestion_tool.view.content import ABOUT_MODEL_TEXT, GRAPH_LEGEND_TEXT
+from attack_path_suggestion_tool.view.graph_renderer import GraphRenderer
+from attack_path_suggestion_tool.view.results_panel import render_attack_path_results
+from attack_path_suggestion_tool.view.sidebar import render_sidebar
 
 
 def render_about_model():

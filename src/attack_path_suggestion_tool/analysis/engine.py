@@ -3,8 +3,8 @@ from typing import Dict, List, Optional
 
 import streamlit as st
 
-from analysis.pathfinding import PathfindingStrategy
-from domain import (
+from attack_path_suggestion_tool.analysis.pathfinding import PathfindingStrategy
+from attack_path_suggestion_tool.domain import (
     Action,
     Actor,
     AttackPlan,

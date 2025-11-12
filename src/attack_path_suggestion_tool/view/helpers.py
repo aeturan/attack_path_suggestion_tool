@@ -1,7 +1,7 @@
 # view/helpers.py
 import streamlit as st
 
-from session_management import save_current_session
+from attack_path_suggestion_tool.session_management import save_current_session
 
 def execute_command(command):
     st.session_state.history.execute(command)

@@ -1,7 +1,7 @@
 import json
 import streamlit as st
-from domain import CommandHistory, Graph
-from config import APP_CONFIG
+from attack_path_suggestion_tool.domain import CommandHistory, Graph
+from attack_path_suggestion_tool.config import APP_CONFIG
 
 SESSIONS_DIR = APP_CONFIG.storage.sessions_dir
 

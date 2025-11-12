@@ -2,7 +2,7 @@
 from collections import defaultdict
 import streamlit.components.v1 as components
 
-from domain import Actor, AttackPlan, AttackStep, DatasourceTrigger, Graph, SelfTrigger
+from attack_path_suggestion_tool.domain import Actor, AttackPlan, AttackStep, DatasourceTrigger, Graph, SelfTrigger
 
 
 class GraphRenderer:

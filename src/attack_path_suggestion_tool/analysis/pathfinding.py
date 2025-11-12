@@ -3,10 +3,10 @@ import itertools
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, List, Set
 
-from domain import Action, AttackPlan, Attempt, AttackStep
+from attack_path_suggestion_tool.domain import Action, AttackPlan, Attempt, AttackStep
 
 if TYPE_CHECKING:
-    from analysis.engine import GraphAnalysis
+    from attack_path_suggestion_tool.analysis.engine import GraphAnalysis
 
 
 def _get_newly_activated_channels(attempt: Attempt) -> Set:

@@ -1,7 +1,7 @@
 from typing import List
 import streamlit as st
 
-from domain import AttackStep
+from attack_path_suggestion_tool.domain import AttackStep
 
 
 def _count_attacker_turns(steps: List[AttackStep], attacker_id: str) -> int:
