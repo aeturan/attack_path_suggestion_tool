@@ -12,13 +12,13 @@ class GraphRenderer:
     def __init__(self, graph: Graph):
         self.graph = graph
 
-    def _traverse_and_number_steps(self, step: AttackStep, counter: int, edge_labels: dict, h_edges: set) -> int:
+    def _traverse_and_number_steps(self, step: AttackStep, counter: int, edge_labels: dict, h_edges: set, victim_id: str | None = None, assets_node_id: str | None = None) -> int:
         """Recursively traverses an AttackStep tree in the correct order to assign numbers, skipping only invisible trigger events (not edges)."""
         # First, handle edge activation triggers (these may be invisible, e.g., datasource-watching)
         if step.edge_activation_trigger:
             for sub_step in step.edge_activation_trigger.steps:
                 # Do NOT increment counter for invisible trigger events (i.e., not an edge)
-                counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges)
+                counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges, victim_id, assets_node_id)
 
         action = step.push_poison_action
         # Only number and highlight edges that actually exist in the graph (visible edges).
@@ -31,10 +31,18 @@ class GraphRenderer:
                 h_edges.add(edge_key)
                 counter += 1
 
+        # Special handling: if this is the final exploit step (victim -> assets), highlight and number it
+        if victim_id and assets_node_id:
+            if action.source_id == victim_id and action.target_id == assets_node_id:
+                edge_key = (victim_id, assets_node_id)
+                edge_labels[edge_key].append(str(counter))
+                h_edges.add(edge_key)
+                counter += 1
+
         # For consumption triggers, recurse as usual (do not increment counter for invisible triggers)
         if step.consumption_trigger:
             for sub_step in step.consumption_trigger.steps:
-                counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges)
+                counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges, victim_id, assets_node_id)
         
         return counter
 
@@ -46,8 +54,10 @@ class GraphRenderer:
         if highlight_path:
             execution_order = 1
             all_plan_steps = [step for attempt in highlight_path.attempts for step in attempt.steps]
+            victim_id = self.graph.victim_id
+            assets_node_id = self.ASSETS_NODE_ID
             for step in all_plan_steps:
-                execution_order = self._traverse_and_number_steps(step, execution_order, edge_labels, h_edges)
+                execution_order = self._traverse_and_number_steps(step, execution_order, edge_labels, h_edges, victim_id, assets_node_id)
 
         for node in self.graph.nodes:
             shape, label = (("([", "])"), node.name) if isinstance(node, Actor) else (("[(", ")]"), node.name)
