@@ -220,7 +220,7 @@ def render_delete_edge_workflow():
 def render_analysis_controls():
     st.subheader("Analysis Parameters")
     num_paths = st.number_input("Number of Paths to Find", 1, 50, APP_CONFIG.analysis.num_paths_to_find)
-    max_cost = st.number_input("Max Attack Cost", 5, 100, APP_CONFIG.analysis.max_attack_cost)
+    max_cost = st.number_input("Max Attack Hops", 5, 100, APP_CONFIG.analysis.max_attack_cost)
     st.markdown("---")
     actor_opts = {n.id: n.name for n in st.session_state.graph.nodes if n.type == "Actor"}
     if not actor_opts: st.caption("Add actors to run an analysis."); return

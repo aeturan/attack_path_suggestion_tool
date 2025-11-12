@@ -42,7 +42,7 @@ def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_su
             st.write("**1. Edge Activation Trigger**")
             if step.edge_activation_trigger:
                 with st.container(border=True):
-                    st.caption(f"Required to activate conditional edge (Cost: {step.edge_activation_trigger.cost})")
+                    st.caption(f"Required to activate conditional edge (Hops: {step.edge_activation_trigger.cost})")
                     _render_attack_steps(step.edge_activation_trigger.steps, get_name_func, is_sub_step=True)
             else:
                 if action.edge_type == 'respond':
@@ -68,7 +68,7 @@ def _render_attack_steps(steps: List[AttackStep], get_name_func: callable, is_su
             st.write("**3. Consumption Trigger**")
             if step.consumption_trigger:
                 with st.container(border=True):
-                    st.caption(f"Required to make the target consume the poison (Cost: {step.consumption_trigger.cost})")
+                    st.caption(f"Required to make the target consume the poison (Hops: {step.consumption_trigger.cost})")
                     _render_attack_steps(step.consumption_trigger.steps, get_name_func, is_sub_step=True)
                     
                     if action.edge_type == 'write':
@@ -94,7 +94,7 @@ def render_attack_path_results():
         node = graph.get_node(node_id)
         return f"_{node.name}_" if node else "_Unknown_"
 
-    plan_options = {i: f"Plan {i+1} (Cost: {p.total_cost})" for i, p in enumerate(st.session_state.attack_paths)}
+    plan_options = {i: f"Plan {i+1} (Hops: {p.total_cost})" for i, p in enumerate(st.session_state.attack_paths)}
     if len(plan_options) > 1:
         st.radio(
             "Select a plan to highlight in the graph:",
@@ -110,8 +110,7 @@ def render_attack_path_results():
         attacker_id = st.session_state.graph.attacker_id
         turns = _count_attacker_turns(all_steps, attacker_id)
         
-        # Construct the new title with "Turns"
-        expander_title = f"Attack Plan {i+1} (Total Cost: {plan.total_cost}, Turns: {turns})"
+        expander_title = f"Attack Plan {i+1} (Total Hops: {plan.total_cost}, Attacker Actions: {turns})"
         
         with st.expander(expander_title, expanded=False):
             if all_steps:
