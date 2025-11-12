@@ -1,2 +1,2 @@
 def main() -> None:
-    print("Hello from threath-analysis-tool!")
+    print("Hello from attack-path-suggestion-tool!")
