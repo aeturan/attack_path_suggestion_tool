@@ -72,9 +72,27 @@ class GraphAnalysis:
                 for i in range(len(path) - 1):
                     source_step_id = path[i]
                     target_step_id = path[i+1]
-                    
+
                     edge = self.graph.get_edge(source_step_id, target_step_id)
-                    edge_type = edge.type if edge else "trigger"
+                    if edge:
+                        edge_type = edge.type
+                    else:
+                        # No explicit graph edge — infer the trigger kind.
+                        if source_step_id == target_step_id:
+                            edge_type = "self_trigger"
+                        else:
+                            # Check if this is a datasource-watch activation: see if source writes to a datasource
+                            # that the target actor is watching.
+                            target_node = self.graph.get_node(target_step_id)
+                            is_datasource_watch = False
+                            if target_node:
+                                # Find datasources written by source_step_id
+                                written_ds = {e.target for e in self.graph.edges if e.type == 'write' and e.source == source_step_id}
+                                for trig in getattr(target_node, 'triggers', []):
+                                    if isinstance(trig, DatasourceTrigger) and trig.datasource_id in written_ds:
+                                        is_datasource_watch = True
+                                        break
+                            edge_type = "datasource" if is_datasource_watch else "trigger"
                     
                     action = Action(source_id=source_step_id, edge_type=edge_type, target_id=target_step_id)
                     step = AttackStep(
