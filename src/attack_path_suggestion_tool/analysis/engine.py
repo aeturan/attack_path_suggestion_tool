@@ -17,6 +17,12 @@ from attack_path_suggestion_tool.domain import (
 )
 
 
+# Function to clear cached data when switching graphs
+def clear_cached_data():
+    st.cache_data.clear()
+    st.cache_resource.clear()
+
+
 class GraphAnalysis:
     ASSETS_NODE_ID = "assets_node"
 

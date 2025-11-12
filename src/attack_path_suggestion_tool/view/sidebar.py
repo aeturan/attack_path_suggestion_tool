@@ -3,7 +3,7 @@ import uuid
 import streamlit as st
 from pydantic import ValidationError
 
-from attack_path_suggestion_tool.analysis.engine import find_attack_paths_cached
+from attack_path_suggestion_tool.analysis.engine import find_attack_paths_cached, clear_cached_data
 from attack_path_suggestion_tool.analysis.pathfinding import StrategicPlannerStrategy
 from attack_path_suggestion_tool.config import APP_CONFIG
 from attack_path_suggestion_tool.domain import Actor, SelfTrigger, DatasourceTrigger
@@ -37,6 +37,7 @@ def render_sidebar():
             format_func=lambda s_id: session_names.get(s_id, "Unknown"), index=None, placeholder="Select a graph to load...")
         if selected_session and selected_session != st.session_state.graph.id:
             st.session_state.confirming_delete = False
+            clear_cached_data()
             load_session_by_id(selected_session)
             st.rerun()
 
@@ -45,6 +46,7 @@ def render_sidebar():
             if st.form_submit_button("Create New Graph"):
                 if new_graph_name:
                     st.session_state.confirming_delete = False
+                    clear_cached_data()
                     create_new_session(new_graph_name)
                     st.rerun()
                 else: st.warning("Please provide a name.")

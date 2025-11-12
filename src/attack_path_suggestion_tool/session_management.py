@@ -2,6 +2,7 @@ import json
 import streamlit as st
 from attack_path_suggestion_tool.domain import CommandHistory, Graph
 from attack_path_suggestion_tool.config import APP_CONFIG
+from attack_path_suggestion_tool.analysis.engine import clear_cached_data
 
 SESSIONS_DIR = APP_CONFIG.storage.sessions_dir
 
@@ -24,6 +25,7 @@ def save_current_session():
             f.write(st.session_state.graph.model_dump_json(indent=2))
 
 def load_session_by_id(session_id: str):
+    clear_cached_data()
     file_path = SESSIONS_DIR / f"{session_id}.json"
     if file_path.exists():
         with open(file_path, 'r') as f:
@@ -42,6 +44,7 @@ def load_latest_session():
     load_session_by_id(latest_file.stem)
 
 def create_new_session(name: str):
+    clear_cached_data()
     st.session_state.graph = Graph(name=name)
     st.session_state.history = CommandHistory()
     st.session_state.attack_paths, st.session_state.selected_path_index = [], None
