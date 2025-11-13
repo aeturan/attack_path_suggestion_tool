@@ -1,0 +1,79 @@
+{
+  "id": "d9cfe032-f419-4ec8-8bba-ba9f49225f17",
+  "name": "respond_edge_test",
+  "nodes": [
+    {
+      "id": "victim_ae48",
+      "name": "victim",
+      "type": "Actor",
+      "triggers": [
+        {
+          "type": "communication",
+          "source_actor_id": "helper_edd3",
+          "edge_type": "respond"
+        },
+        {
+          "type": "datasource",
+          "datasource_id": "DS_trigger_cf4f"
+        }
+      ]
+    },
+    {
+      "id": "attacker_9ea1",
+      "name": "attacker",
+      "type": "Actor",
+      "triggers": []
+    },
+    {
+      "id": "helper_edd3",
+      "name": "helper",
+      "type": "Actor",
+      "triggers": [
+        {
+          "type": "communication",
+          "source_actor_id": "attacker_9ea1",
+          "edge_type": "communicate"
+        },
+        {
+          "type": "communication",
+          "source_actor_id": "victim_ae48",
+          "edge_type": "communicate"
+        }
+      ]
+    },
+    {
+      "id": "DS_trigger_cf4f",
+      "name": "DS_trigger",
+      "type": "Datasource"
+    }
+  ],
+  "edges": [
+    {
+      "source": "attacker_9ea1",
+      "target": "DS_trigger_cf4f",
+      "type": "write"
+    },
+    {
+      "source": "attacker_9ea1",
+      "target": "helper_edd3",
+      "type": "communicate"
+    },
+    {
+      "source": "victim_ae48",
+      "target": "helper_edd3",
+      "type": "communicate"
+    },
+    {
+      "source": "helper_edd3",
+      "target": "victim_ae48",
+      "type": "respond"
+    },
+    {
+      "source": "DS_trigger_cf4f",
+      "target": "victim_ae48",
+      "type": "read"
+    }
+  ],
+  "attacker_id": "attacker_9ea1",
+  "victim_id": "victim_ae48"
+}

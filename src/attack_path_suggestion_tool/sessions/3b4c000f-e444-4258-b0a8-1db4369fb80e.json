@@ -19,11 +19,6 @@
           "type": "communication",
           "source_actor_id": "email_tool_826e",
           "edge_type": "respond"
-        },
-        {
-          "type": "communication",
-          "source_actor_id": "Human_Driver_863c",
-          "edge_type": "communicate"
         }
       ]
     },
@@ -60,21 +55,6 @@
       "id": "Long-term_memory_cc01",
       "name": "Long-term memory",
       "type": "Datasource"
-    },
-    {
-      "id": "Human_Driver_863c",
-      "name": "Human Driver",
-      "type": "Actor",
-      "triggers": [
-        {
-          "type": "self"
-        },
-        {
-          "type": "communication",
-          "source_actor_id": "car_agent_abe4",
-          "edge_type": "communicate"
-        }
-      ]
     }
   ],
   "edges": [
@@ -117,16 +97,6 @@
       "source": "email_tool_826e",
       "target": "car_agent_abe4",
       "type": "respond"
-    },
-    {
-      "source": "Human_Driver_863c",
-      "target": "car_agent_abe4",
-      "type": "communicate"
-    },
-    {
-      "source": "car_agent_abe4",
-      "target": "Human_Driver_863c",
-      "type": "communicate"
     }
   ],
   "attacker_id": "attacker_0236",
