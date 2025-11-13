@@ -55,9 +55,12 @@ class StrategicPlannerStrategy(PathfindingStrategy):
 
         initial_compromised_state = {attacker_id: frozenset()}
 
-        attacker_heuristic = 0
+        heuristic_map = graph_analysis.poison_heuristic
+        max_known_distance = max(heuristic_map.values(), default=0)
+        fallback_heuristic = max_known_distance + 1 if heuristic_map else 0
+
         initial_state = (
-            attacker_heuristic,
+            heuristic_map.get(attacker_id, fallback_heuristic),
             next(tie_breaker),
             0,
             AttackPlan(steps=[], total_cost=0),
@@ -238,7 +241,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                         active_channels=updated_channels
                     )
                     
-                    h_cost = graph_analysis.poison_heuristic.get(target_id, 0)
+                    h_cost = heuristic_map.get(target_id, fallback_heuristic)
                     f_cost = new_g_cost + h_cost
 
                     new_compromised_state_fs = frozenset(new_compromised_edges_by_actor.items())
