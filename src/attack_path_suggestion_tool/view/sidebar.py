@@ -74,10 +74,16 @@ def render_sidebar():
         if c1.button("Undo", use_container_width=True, disabled=not st.session_state.history.undo_stack):
             st.session_state.history.undo()
             save_current_session()
+            clear_cached_data()
+            st.session_state.attack_paths = []
+            st.session_state.selected_path_index = None
             st.rerun()
         if c2.button("Redo", use_container_width=True, disabled=not st.session_state.history.redo_stack):
             st.session_state.history.redo()
             save_current_session()
+            clear_cached_data()
+            st.session_state.attack_paths = []
+            st.session_state.selected_path_index = None
             st.rerun()
 
         for cmd in reversed(st.session_state.history.undo_stack[-5:]): st.caption(f"↩️ {cmd.description}")
