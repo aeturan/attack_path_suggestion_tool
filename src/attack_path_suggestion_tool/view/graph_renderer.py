@@ -12,51 +12,102 @@ class GraphRenderer:
     def __init__(self, graph: Graph):
         self.graph = graph
 
-    def _traverse_and_number_steps(self, step: AttackStep, counter: int, edge_labels: dict, h_edges: set, victim_id: str | None = None, assets_node_id: str | None = None) -> int:
+    def _find_datasource_bridge(self, writer_id: str, watcher_id: str) -> str | None:
+        """Locate a datasource that connects a writer to a watcher via write/read edges."""
+        write_targets = [e.target for e in self.graph.edges if e.source == writer_id and e.type == 'write']
+        for ds_id in write_targets:
+            read_edge = self.graph.get_edge(ds_id, watcher_id)
+            if read_edge and read_edge.type == 'read':
+                return ds_id
+        return None
+
+    @staticmethod
+    def _append_highlight(edge_key: tuple[str, str], counter: int, edge_labels: dict, h_edges: set, ordered_edges: list[tuple[str, str]]) -> int:
+        """Append numbering for a concrete edge unless it repeats the previous edge consecutively."""
+        if ordered_edges and ordered_edges[-1] == edge_key:
+            return counter
+        edge_labels[edge_key].append(str(counter))
+        h_edges.add(edge_key)
+        ordered_edges.append(edge_key)
+        return counter + 1
+
+    def _traverse_and_number_steps(
+        self,
+        step: AttackStep,
+        counter: int,
+        edge_labels: dict,
+        h_edges: set,
+        ordered_edges: list[tuple[str, str]],
+        victim_id: str | None = None,
+        assets_node_id: str | None = None,
+    ) -> int:
         """Recursively traverses an AttackStep tree in the correct order to assign numbers, skipping only invisible trigger events (not edges)."""
         # First, handle edge activation triggers (these may be invisible, e.g., datasource-watching)
         if step.edge_activation_trigger:
             for sub_step in step.edge_activation_trigger.steps:
                 # Do NOT increment counter for invisible trigger events (i.e., not an edge)
-                counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges, victim_id, assets_node_id)
+                counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges, ordered_edges, victim_id, assets_node_id)
 
         action = step.push_poison_action
+        handled_datasource = False
+        if action.edge_type == 'datasource':
+            datasource_id = self._find_datasource_bridge(action.source_id, action.target_id)
+            if datasource_id:
+                write_key = (action.source_id, datasource_id)
+                write_edge = self.graph.get_edge(*write_key)
+                if write_edge:
+                    counter = self._append_highlight(write_key, counter, edge_labels, h_edges, ordered_edges)
+                read_key = (datasource_id, action.target_id)
+                read_edge = self.graph.get_edge(*read_key)
+                if read_edge:
+                    counter = self._append_highlight(read_key, counter, edge_labels, h_edges, ordered_edges)
+            handled_datasource = True
         # Only number and highlight edges that actually exist in the graph (visible edges).
         # This avoids numbering invisible trigger events (like datasource-watch activations) and self-triggers.
-        if action.edge_type != 'self_trigger':
+        if action.edge_type != 'self_trigger' and not handled_datasource:
             edge_key = (action.source_id, action.target_id)
             # Only label if the graph contains a corresponding edge
             if self.graph.get_edge(action.source_id, action.target_id) is not None:
-                edge_labels[edge_key].append(str(counter))
-                h_edges.add(edge_key)
-                counter += 1
+                counter = self._append_highlight(edge_key, counter, edge_labels, h_edges, ordered_edges)
 
         # Special handling: if this is the final exploit step (victim -> assets), highlight and number it
         if victim_id and assets_node_id:
             if action.source_id == victim_id and action.target_id == assets_node_id:
                 edge_key = (victim_id, assets_node_id)
-                edge_labels[edge_key].append(str(counter))
-                h_edges.add(edge_key)
-                counter += 1
+                counter = self._append_highlight(edge_key, counter, edge_labels, h_edges, ordered_edges)
 
         # For consumption triggers, recurse as usual (do not increment counter for invisible triggers)
         if step.consumption_trigger:
             for sub_step in step.consumption_trigger.steps:
-                counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges, victim_id, assets_node_id)
+                counter = self._traverse_and_number_steps(sub_step, counter, edge_labels, h_edges, ordered_edges, victim_id, assets_node_id)
         
         return counter
 
-    def generate_mermaid_code(self, highlight_path: AttackPlan | None = None) -> str:
-        lines = ["graph TD"]
-        
-        edge_labels = defaultdict(list)
-        h_edges = set()
+    def _collect_highlight_metadata(self, highlight_path: AttackPlan | None = None) -> tuple[dict, set, int]:
+        """Prepare edge labels, highlighted edges, and final counter for a path."""
+        edge_labels: defaultdict[tuple[str, str], list[str]] = defaultdict(list)
+        h_edges: set[tuple[str, str]] = set()
+        ordered_edges: list[tuple[str, str]] = []
+        counter = 1
         if highlight_path:
-            execution_order = 1
             victim_id = self.graph.victim_id
             assets_node_id = self.ASSETS_NODE_ID
             for step in highlight_path.steps:
-                execution_order = self._traverse_and_number_steps(step, execution_order, edge_labels, h_edges, victim_id, assets_node_id)
+                counter = self._traverse_and_number_steps(
+                    step,
+                    counter,
+                    edge_labels,
+                    h_edges,
+                    ordered_edges,
+                    victim_id,
+                    assets_node_id,
+                )
+        return edge_labels, h_edges, counter
+
+    def generate_mermaid_code(self, highlight_path: AttackPlan | None = None) -> str:
+        lines = ["graph TD"]
+
+        edge_labels, h_edges, _ = self._collect_highlight_metadata(highlight_path)
 
         for node in self.graph.nodes:
             shape, label = (("([", "])"), node.name) if isinstance(node, Actor) else (("[(", ")]"), node.name)
@@ -107,6 +158,18 @@ class GraphRenderer:
                 lines.append(f"    {self.graph.victim_id} -- exploit --> {self.ASSETS_NODE_ID}")
 
         return "\n".join(lines)
+
+    def calculate_visible_hops(self, highlight_path: AttackPlan | None = None) -> int:
+        """Count the number of visible hops that receive numbering in the graph."""
+        _, _, counter = self._collect_highlight_metadata(highlight_path)
+        return max(0, counter - 1)
+
+    def calculate_attacker_actions(self, highlight_path: AttackPlan | None = None, attacker_id: str | None = None) -> int:
+        """Count how many numbered edges originate from the attacker in the highlighted path."""
+        if not highlight_path or not attacker_id:
+            return 0
+        edge_labels, _, _ = self._collect_highlight_metadata(highlight_path)
+        return sum(len(labels) for (source, _), labels in edge_labels.items() if source == attacker_id)
 
     def render_mermaid(self, mermaid_code: str):
         html_code = f"""

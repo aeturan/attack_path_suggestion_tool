@@ -1,30 +1,29 @@
-from typing import List
+from typing import List, Set
 import streamlit as st
 
-from attack_path_suggestion_tool.domain import AttackStep
+from attack_path_suggestion_tool.domain import AttackStep, Actor, DatasourceTrigger, Graph
+from attack_path_suggestion_tool.view.graph_renderer import GraphRenderer
 
 
-def _count_attacker_turns(steps: List[AttackStep], attacker_id: str) -> int:
-    """Recursively traverses all steps in a plan to count actions initiated by the attacker."""
-    count = 0
-    if not attacker_id:
-        return 0
-    for step in steps:
-        # Count the current step if the source is the attacker
-        if step.push_poison_action.source_id == attacker_id:
-            count += 1
-        # Recurse into the edge activation trigger if it exists
-        if step.edge_activation_trigger:
-            count += _count_attacker_turns(step.edge_activation_trigger.steps, attacker_id)
-        # Recurse into the consumption trigger if it exists
-        if step.consumption_trigger:
-            count += _count_attacker_turns(step.consumption_trigger.steps, attacker_id)
-    return count
+def _infer_datasource_for_trigger(graph: Graph | None, source_id: str, target_id: str) -> str | None:
+    """Find the datasource that links a writer to a watcher for inferred datasource trigger steps."""
+    if graph is None:
+        return None
+    target_node = graph.get_node(target_id)
+    if not isinstance(target_node, Actor):
+        return None
+    for trigger in target_node.triggers:
+        if isinstance(trigger, DatasourceTrigger):
+            ds_id = trigger.datasource_id
+            if graph.get_edge(source_id, ds_id) and graph.get_edge(ds_id, target_id):
+                return ds_id
+    return None
 
 
 def _render_attack_steps(
     steps: List[AttackStep],
     get_name_func: callable,
+    graph: Graph | None = None,
     is_sub_step: bool = False,
     start_index: int = 1,
     parent_step: AttackStep | None = None,
@@ -48,6 +47,8 @@ def _render_attack_steps(
                     is_write_pattern = True
                     datasource_id = sub_act.source_id
                     break
+        if not is_write_pattern and action.edge_type == 'datasource':
+            datasource_id = _infer_datasource_for_trigger(graph, action.source_id, step.target_actor_id)
 
         if action.edge_type == 'datasource' and parent_step and parent_step.push_poison_action.edge_type == 'write':
             source_actor_id = action.source_id
@@ -56,6 +57,10 @@ def _render_attack_steps(
         elif is_write_pattern:
             source_actor_id = action.source_id
             target_actor_id = step.target_actor_id
+            step_title = f"Step {start_index + k}: {get_name_func(source_actor_id)} `—(write)→` {get_name_func(datasource_id)} `—(read)→` {get_name_func(target_actor_id)}"
+        elif action.edge_type == 'datasource' and datasource_id:
+            source_actor_id = action.source_id
+            target_actor_id = action.target_id
             step_title = f"Step {start_index + k}: {get_name_func(source_actor_id)} `—(write)→` {get_name_func(datasource_id)} `—(read)→` {get_name_func(target_actor_id)}"
         else:
             source_actor_id = action.source_id
@@ -79,12 +84,36 @@ def _render_attack_steps(
                     # If the activation chain contains inferred auto-triggers, surface a concise note.
                     activation_types = {s.push_poison_action.edge_type for s in step.edge_activation_trigger.steps}
                     if 'self_trigger' in activation_types:
-                        st.caption("Auto-trigger: the actor can self-trigger; assumed activated by poison arrival (no explicit trigger needed).")
+                        actors_with_self_trigger: Set[str] = {
+                            s.push_poison_action.source_id
+                            for s in step.edge_activation_trigger.steps
+                            if s.push_poison_action.edge_type == 'self_trigger'
+                        }
+                        for actor_id in sorted(actors_with_self_trigger):
+                            st.caption(
+                                f"Auto-trigger: {get_name_func(actor_id)} can self-trigger; assumed activated by poison arrival (no explicit trigger needed)."
+                            )
                     if 'datasource' in activation_types:
-                        st.caption("Auto-trigger: the actor watches a datasource and is triggered when that datasource is written.")
+                        notes: Set[str] = set()
+                        for sub_step in step.edge_activation_trigger.steps:
+                            if sub_step.push_poison_action.edge_type != 'datasource':
+                                continue
+                            writer_id = sub_step.push_poison_action.source_id
+                            watcher_id = sub_step.push_poison_action.target_id
+                            ds_id = _infer_datasource_for_trigger(graph, writer_id, watcher_id)
+                            watcher_name = get_name_func(watcher_id)
+                            writer_name = get_name_func(writer_id)
+                            if ds_id:
+                                ds_name = get_name_func(ds_id)
+                                notes.add(f"{watcher_name} watches {ds_name} and is triggered when {writer_name} writes to it.")
+                            else:
+                                notes.add(f"{watcher_name} is triggered by {writer_name} via a datasource watch.")
+                        for text in sorted(notes):
+                            st.caption(f"Auto-trigger: {text}")
                     _render_attack_steps(
                         step.edge_activation_trigger.steps,
                         get_name_func,
+                        graph,
                         is_sub_step=True,
                         parent_step=step,
                     )
@@ -115,6 +144,10 @@ def _render_attack_steps(
             elif action.edge_type == 'datasource' and parent_step and parent_step.push_poison_action.edge_type == 'write':
                 ds_id = parent_step.push_poison_action.target_id
                 st.markdown(f"> {get_name_func(action.source_id)} `—(write)→` {get_name_func(ds_id)}")
+            elif action.edge_type == 'datasource' and datasource_id:
+                st.markdown(
+                    f"> {get_name_func(action.source_id)} `—(write)→` {get_name_func(datasource_id)} `—(read)→` {get_name_func(action.target_id)}"
+                )
             elif action.edge_type in primitive_types:
                 st.markdown(f"> {get_name_func(action.source_id)} `—({action.edge_type})→` {get_name_func(action.target_id)}")
             else:
@@ -136,6 +169,7 @@ def _render_attack_steps(
                     _render_attack_steps(
                         step.consumption_trigger.steps,
                         get_name_func,
+                        graph,
                         is_sub_step=True,
                         parent_step=step,
                     )
@@ -158,7 +192,12 @@ def render_attack_path_results():
         node = graph.get_node(node_id)
         return f"_{node.name}_" if node else "_Unknown_"
 
-    plan_options = {i: f"Plan {i+1} (Hops: {p.total_cost})" for i, p in enumerate(st.session_state.attack_paths)}
+    renderer = GraphRenderer(graph)
+    visible_hops = [renderer.calculate_visible_hops(plan) for plan in st.session_state.attack_paths]
+    attacker_id = graph.attacker_id if graph else None
+    attacker_action_counts = [renderer.calculate_attacker_actions(plan, attacker_id) for plan in st.session_state.attack_paths]
+
+    plan_options = {i: f"Plan {i+1} (Hops: {visible_hops[i]})" for i, _ in enumerate(st.session_state.attack_paths)}
     if len(plan_options) > 1:
         st.radio(
             "Select a plan to highlight in the graph:",
@@ -169,13 +208,11 @@ def render_attack_path_results():
         )
     
     for i, plan in enumerate(st.session_state.attack_paths):
-        attacker_id = st.session_state.graph.attacker_id
-        turns = _count_attacker_turns(plan.steps, attacker_id)
-        
-        expander_title = f"Attack Plan {i+1} (Total Hops: {plan.total_cost}, Attacker Actions: {turns})"
-        
+        attacker_actions = attacker_action_counts[i]
+        expander_title = f"Attack Plan {i+1} (Total Hops: {visible_hops[i]}, Attacker Actions: {attacker_actions})"
+
         with st.expander(expander_title, expanded=False):
             if plan.steps:
-                _render_attack_steps(plan.steps, get_name)
+                _render_attack_steps(plan.steps, get_name, graph)
             else:
                 st.caption("This plan has no steps.")
