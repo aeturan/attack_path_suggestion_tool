@@ -3,9 +3,17 @@ Contains all data structures and domain models for the application.
 """
 import uuid
 from abc import ABC, abstractmethod
-from typing import List, Literal, Optional, Union, Tuple, Set
+from typing import List, Literal, Optional, Union, Tuple, Set, TypeAlias
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+
+
+# Core action/edge semantics typed once to keep string literals consistent.
+EdgeType: TypeAlias = Literal["read", "write", "communicate", "respond"]
+CommunicationTriggerType: TypeAlias = Literal["communicate", "respond"]
+DerivedTriggerActionType: TypeAlias = Literal["self_trigger", "datasource", "trigger"]
+SpecialActionType: TypeAlias = Literal["exploit"]
+ActionType: TypeAlias = EdgeType | DerivedTriggerActionType | SpecialActionType
 
 
 # --- Command Pattern Abstract Base Class ---
@@ -29,7 +37,7 @@ class DatasourceTrigger(BaseTrigger):
 class CommunicationTrigger(BaseTrigger):
     type: Literal["communication"] = "communication"
     source_actor_id: str
-    edge_type: Literal["communicate", "respond"]
+    edge_type: CommunicationTriggerType
 
 Trigger = Union[SelfTrigger, DatasourceTrigger, CommunicationTrigger]
 
@@ -47,13 +55,13 @@ class Datasource(Node):
 class Edge(BaseModel):
     source: str
     target: str
-    type: Literal["read", "write", "communicate", "respond"]
+    type: EdgeType
 
 # --- Analysis Result Models ---
 
 class Action(BaseModel):
     source_id: str
-    edge_type: str
+    edge_type: ActionType
     target_id: str
 
 class TriggerChain(BaseModel):
@@ -86,8 +94,8 @@ class AttackPlan(BaseModel):
 class Graph(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Untitled Graph"
-    nodes: List[Union[Actor, Datasource]] = []
-    edges: List[Edge] = []
+    nodes: List[Union[Actor, Datasource]] = Field(default_factory=list)
+    edges: List[Edge] = Field(default_factory=list)
     attacker_id: str | None = None
     victim_id: str | None = None
     def get_node(self, node_id: str) -> Union[Actor, Datasource, None]:
@@ -100,9 +108,9 @@ class Graph(BaseModel):
         return None
 
 class CommandHistory(BaseModel):
-    undo_stack: List[Command] = []
-    redo_stack: List[Command] = []
-    class Config: arbitrary_types_allowed = True
+    undo_stack: List[Command] = Field(default_factory=list)
+    redo_stack: List[Command] = Field(default_factory=list)
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     def execute(self, command: Command):
         command.execute()
         self.undo_stack.append(command)
