@@ -74,17 +74,13 @@ class AttackStep(BaseModel):
     compromise_edge: Tuple[str, str]
     consumption_trigger: Optional[TriggerChain] = None
     edge_activation_trigger: Optional[TriggerChain] = None
-    total_step_cost: int
+    cost: int
+    summary: str
 
 TriggerChain.model_rebuild()
 
-class Attempt(BaseModel):
-    steps: List[AttackStep] = Field(default_factory=list)
-    total_attempt_cost: int
-    summary: str 
-
 class AttackPlan(BaseModel):
-    attempts: List[Attempt] = Field(default_factory=list)
+    steps: List[AttackStep] = Field(default_factory=list)
     total_cost: int
     # Add a transient field to carry the active channels state during the search
     active_channels: Set[Tuple[str, str]] = Field(default_factory=set, exclude=True)

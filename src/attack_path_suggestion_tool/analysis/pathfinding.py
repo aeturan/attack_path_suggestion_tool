@@ -3,16 +3,16 @@ import itertools
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, List, Set
 
-from attack_path_suggestion_tool.domain import Action, AttackPlan, Attempt, AttackStep
+from attack_path_suggestion_tool.domain import Action, AttackPlan, AttackStep
 
 if TYPE_CHECKING:
     from attack_path_suggestion_tool.analysis.engine import GraphAnalysis
 
 
-def _get_newly_activated_channels(attempt: Attempt) -> Set:
-    """Helper function to find all channels activated within an Attempt's steps and triggers."""
+def _get_newly_activated_channels(steps: List[AttackStep]) -> Set:
+    """Helper function to find all channels activated within the provided steps and triggers."""
     newly_activated = set()
-    
+
     def find_channels_recursive(step: AttackStep):
         action = step.push_poison_action
         if action.edge_type == "communicate":
@@ -24,9 +24,9 @@ def _get_newly_activated_channels(attempt: Attempt) -> Set:
             for sub_step in step.consumption_trigger.steps:
                 find_channels_recursive(sub_step)
 
-    for step in attempt.steps:
+    for step in steps:
         find_channels_recursive(step)
-    
+
     return newly_activated
 
 
@@ -54,11 +54,13 @@ class StrategicPlannerStrategy(PathfindingStrategy):
         tie_breaker = itertools.count()
 
         initial_compromised_state = {attacker_id: frozenset()}
+
+        attacker_heuristic = 0
         initial_state = (
-            graph_analysis.poison_heuristic.get(attacker_id, 999),
+            attacker_heuristic,
             next(tie_breaker),
             0,
-            AttackPlan(attempts=[], total_cost=0),
+            AttackPlan(steps=[], total_cost=0),
             attacker_id,
             frozenset(initial_compromised_state.items()),
         )
@@ -67,6 +69,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
         found_plans = []
         visited = set()
 
+        # A* search loop
         while pq and len(found_plans) < num_paths:
             _, g_cost, plan, last_compromised_actor_id, compromised_state_fs = heapq.heappop(pq)[1:]
             compromised_edges_by_actor = dict(compromised_state_fs)
@@ -107,17 +110,13 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                         push_poison_action=push_action,
                         target_actor_id=target_id,
                         compromise_edge=compromise_edge,
-                        total_step_cost=1
-                    )
-                    new_attempt = Attempt(
-                        steps=[step],
-                        total_attempt_cost=1,
+                        cost=1,
                         summary=f"Compromise Assets via '{graph_analysis.graph.get_node(actor_id).name}'."
                     )
-                    
-                    new_g_cost = g_cost + new_attempt.total_attempt_cost
+
+                    new_g_cost = g_cost + step.cost
                     new_plan = AttackPlan(
-                        attempts=plan.attempts + [new_attempt], 
+                        steps=plan.steps + [step],
                         total_cost=new_g_cost,
                         active_channels=current_channels
                     )
@@ -132,7 +131,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     continue
 
                 original_edge = graph_analysis.graph.get_edge(actor_id, target_id)
-                new_attempt = None
+                new_step: AttackStep | None = None
                 
                 if original_edge and original_edge.type in ["communicate", "respond"]:
                     compromise_edge = (actor_id, target_id)
@@ -155,8 +154,11 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                                 final_activator_trigger = best_activator.model_copy(deep=True)
                                 activating_action = Action(source_id=target_id, edge_type='communicate', target_id=actor_id)
                                 activating_step = AttackStep(
-                                    push_poison_action=activating_action, target_actor_id=actor_id,
-                                    compromise_edge=(activating_action.source_id, activating_action.target_id), total_step_cost=1
+                                    push_poison_action=activating_action,
+                                    target_actor_id=actor_id,
+                                    compromise_edge=(activating_action.source_id, activating_action.target_id),
+                                    cost=1,
+                                    summary=f"Activate respond channel between '{graph_analysis.graph.get_node(target_id).name}' and '{graph_analysis.graph.get_node(actor_id).name}'."
                                 )
                                 final_activator_trigger.steps.append(activating_step)
                                 final_activator_trigger.cost += 1
@@ -166,9 +168,15 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                                 continue
                     
                     step_cost = 1 + activation_cost
-                    step = AttackStep(push_poison_action=push_action, target_actor_id=target_id, compromise_edge=compromise_edge, edge_activation_trigger=edge_trigger, total_step_cost=step_cost)
-                    new_attempt = Attempt(steps=[step], total_attempt_cost=step_cost, summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via direct communication.")
-                    
+                    new_step = AttackStep(
+                        push_poison_action=push_action,
+                        target_actor_id=target_id,
+                        compromise_edge=compromise_edge,
+                        edge_activation_trigger=edge_trigger,
+                        cost=step_cost,
+                        summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via direct communication."
+                    )
+
                     new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
                     new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
 
@@ -192,23 +200,32 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     final_trigger = best_trigger.model_copy(deep=True)
                     read_action = Action(source_id=datasource_id, edge_type='read', target_id=target_id)
                     read_step = AttackStep(
-                        push_poison_action=read_action, target_actor_id=target_id,
-                        compromise_edge=compromise_edge, total_step_cost=1
+                        push_poison_action=read_action,
+                        target_actor_id=target_id,
+                        compromise_edge=compromise_edge,
+                        cost=1,
+                        summary=f"{graph_analysis.graph.get_node(target_id).name} reads from datasource '{graph_analysis.graph.get_node(datasource_id).name}'."
                     )
                     final_trigger.steps.append(read_step)
                     final_trigger.cost += 1
 
                     write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
-                    write_step = AttackStep(push_poison_action=write_action, target_actor_id=target_id, compromise_edge=compromise_edge, consumption_trigger=final_trigger, total_step_cost=1 + final_trigger.cost)
-                    new_attempt = Attempt(steps=[write_step], total_attempt_cost=write_step.total_step_cost, summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via Datasource '{graph_analysis.graph.get_node(datasource_id).name}'.")
+                    new_step = AttackStep(
+                        push_poison_action=write_action,
+                        target_actor_id=target_id,
+                        compromise_edge=compromise_edge,
+                        consumption_trigger=final_trigger,
+                        cost=1 + final_trigger.cost,
+                        summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via Datasource '{graph_analysis.graph.get_node(datasource_id).name}'."
+                    )
                     
                     new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
                     new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
 
-                if new_attempt:
-                    new_g_cost = g_cost + new_attempt.total_attempt_cost
-                    
-                    newly_activated = _get_newly_activated_channels(new_attempt)
+                if new_step:
+                    new_g_cost = g_cost + new_step.cost
+
+                    newly_activated = _get_newly_activated_channels([new_step])
                     updated_channels = current_channels.union(newly_activated)
 
                     if original_edge and original_edge.type == 'respond':
@@ -216,12 +233,12 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                         updated_channels.discard(activation_key_to_consume)
 
                     new_plan = AttackPlan(
-                        attempts=plan.attempts + [new_attempt], 
+                        steps=plan.steps + [new_step],
                         total_cost=new_g_cost,
                         active_channels=updated_channels
                     )
                     
-                    h_cost = graph_analysis.poison_heuristic.get(target_id, 999)
+                    h_cost = graph_analysis.poison_heuristic.get(target_id, 0)
                     f_cost = new_g_cost + h_cost
 
                     new_compromised_state_fs = frozenset(new_compromised_edges_by_actor.items())

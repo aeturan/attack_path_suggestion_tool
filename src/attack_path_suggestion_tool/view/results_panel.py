@@ -169,15 +169,13 @@ def render_attack_path_results():
         )
     
     for i, plan in enumerate(st.session_state.attack_paths):
-        # Flatten all steps from all attempts to calculate the total turns
-        all_steps = [step for attempt in plan.attempts for step in attempt.steps]
         attacker_id = st.session_state.graph.attacker_id
-        turns = _count_attacker_turns(all_steps, attacker_id)
+        turns = _count_attacker_turns(plan.steps, attacker_id)
         
         expander_title = f"Attack Plan {i+1} (Total Hops: {plan.total_cost}, Attacker Actions: {turns})"
         
         with st.expander(expander_title, expanded=False):
-            if all_steps:
-                _render_attack_steps(all_steps, get_name)
+            if plan.steps:
+                _render_attack_steps(plan.steps, get_name)
             else:
                 st.caption("This plan has no steps.")

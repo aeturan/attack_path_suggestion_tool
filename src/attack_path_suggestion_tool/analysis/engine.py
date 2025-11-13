@@ -105,7 +105,8 @@ class GraphAnalysis:
                         push_poison_action=action,
                         target_actor_id=action.target_id,
                         compromise_edge=(action.source_id, action.target_id),
-                        total_step_cost=1
+                        cost=1,
+                        summary=f"Trigger from {source_step_id} to {target_step_id} via {edge_type}"
                     )
                     steps.append(step)
                 return TriggerChain(steps=steps, cost=len(steps))
@@ -158,6 +159,7 @@ class GraphAnalysis:
         distances: Dict[str, int] = {self.ASSETS_NODE_ID: 0}
         queue = deque([self.ASSETS_NODE_ID])
         visited = {self.ASSETS_NODE_ID}
+        # BFS to compute shortest distances
         while queue:
             node = queue.popleft()
             for neighbor in rev_poison_graph.get(node, []):

@@ -53,10 +53,9 @@ class GraphRenderer:
         h_edges = set()
         if highlight_path:
             execution_order = 1
-            all_plan_steps = [step for attempt in highlight_path.attempts for step in attempt.steps]
             victim_id = self.graph.victim_id
             assets_node_id = self.ASSETS_NODE_ID
-            for step in all_plan_steps:
+            for step in highlight_path.steps:
                 execution_order = self._traverse_and_number_steps(step, execution_order, edge_labels, h_edges, victim_id, assets_node_id)
 
         for node in self.graph.nodes:
