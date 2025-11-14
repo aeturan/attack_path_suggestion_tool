@@ -12,7 +12,7 @@ from attack_path_suggestion_tool.domain import (
 
 
 def test_trigger_chain_flattening():
-    # Create nested trigger chains with AttackStep (no Attempt)
+    # Create nested trigger chains with AttackStep
     action1 = Action(source_id="A", edge_type="write", target_id="B")
     step1 = AttackStep(
         push_poison_action=action1,
