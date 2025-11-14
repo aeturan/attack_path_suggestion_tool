@@ -1,70 +1,67 @@
 # view/content.py
 
 ABOUT_MODEL_TEXT = """
-#### An Opinionated Framework for Modeling Attacks
+#### Modeling How Agentic Attacks Actually Unfold
 
-This tool provides a formal grammar for discovering complex attacks in Gen AI systems. We model attacks by deconstructing them into a few core primitives that follow a simple, powerful loop.
-
----
-
-##### **1. The Primitives: Actors & Datasources**
-
-* **Actors `([ ])`**: The **"doers."** These are the only components that can perform actions.
-    * *Think: The AI Assistant, a Human Driver, an API Tool.*
-* **Datasources `[( )]`**: The **"things."** These are passive containers of data or state that are acted upon.
-    * *Think: A database, a driver's connected phone, GPS navigation data.*
+The workbench treats every attack as a repeatable story made of two nouns and one verb:
+**Actors** perform **Actions** against **Datasources**, and each action can wake up the next actor.
 
 ---
 
-##### **2. The Core Loop: Trigger → Action → Trigger**
+##### 1. What Lives in the Graph?
 
-An attack propagates as a chain reaction. The fundamental cycle is: a **Trigger** makes an Actor active, and the **Action** it performs then causes the next Trigger.
+| Concept | How to read it | Typical examples |
+| --- | --- | --- |
+| **Actors** | Active components that can send/receive data. | LLM agent, autonomous vehicle stack, human operator, API worker. |
+| **Datasources** | Passive stores of state or content. | Vector DB, inbox queue, vehicle sensor buffer, system prompt vault. |
+| **Edges** | Concrete ways actors move or observe data. | `write`, `read`, `communicate`, `respond`. |
 
-* **A Trigger Wakes the Actor:**
-    A dormant Actor must be activated by a **Trigger**. There are three kinds of triggers:
-    1.  **Self-Trigger `🔄`**: The Actor activates itself.
-    2.  **Datasource Trigger `🔔`**: A `write` action to a Datasource the Actor is "watching" activates it.
-    3.  **Communication Trigger**: A `comm` or `resp` action from another Actor activates it.
-
-* **An Active Actor Performs Actions:**
-    Once active, an Actor can perform any of its defined **Actions** (represented by its outgoing edges):
-    -   `read`: Ingest data from a Datasource.
-    -   `write`: Modify data in a Datasource.
-    -   `comm` / `resp`: Send a message to another Actor.
-
-This cycle—where one Actor's `write` or `comm` action becomes the *trigger* for the next—is how the attack path extends across the system.
+Only actors can initiate actions, while datasources simply hold poison until another actor consumes it.
 
 ---
 
-##### **3. Our Thesis: A Grammar for Attacks**
+##### 2. The Trigger → Action → Trigger Loop
 
-We believe any complex attack can be described using this grammar. By finding "sentences" that start at the Attacker and end at the Victim's `Assets`, we can uncover surprising and non-obvious vulnerabilities.
+Attack propagation is modeled as repeating micro-loops:
+
+1. **Trigger**: Something wakes an actor up. Triggers can be self-activation (`🔄`), a watched datasource being written (`🔔`), or a message (`communicate`/`respond`).
+2. **Action**: Once active, the actor can follow any outgoing edge (read, write, communicate, respond).
+3. **New Trigger**: That action creates the conditions for the next actor to wake up, and the chain continues.
+
+Because the loop is explicit, the planner can reason about when a `respond` edge is usable, when a datasource watch fires automatically, and where the attacker must spend real effort.
+
+---
+
+##### 3. How to Capture a System
+
+1. **Sketch the components**: Add every actor and datasource relevant to the scenario.
+2. **Wire the flows**: Add `write`/`read` edges for data movement and `communicate`/`respond` edges for messaging contracts.
+3. **Annotate triggers**: Mark self-triggers and datasource watches on each actor so the engine knows how it reactivates.
+4. **Set roles**: Pick the attacker and victim, then let the planner search for paths that end in the synthetic `Assets` node.
+
+The generated plans describe exactly which actions (and supporting triggers) an attacker must line up to reach the victim's critical assets.
 """
 
 GRAPH_LEGEND_TEXT = """
-#### Node Reference
-* **Shapes:**
-    - `([Actor])`: An **Actor** is an active component that performs actions.
-    - `[(Datasource)]`: A **Datasource** is a passive component that stores data.
-* **Indicators (on Actors):**
-    - `🔄` **Self-Trigger**: Actor can initiate actions on its own.
-    - `🔔` **Datasource Trigger**: Actor is triggered by writes to a datasource it watches.
-* **Roles (Colors):**
-    - **Red Fill**: The selected **Attacker**.
-    - **Orange Fill**: The selected **Victim**.
-    - **Green Highlight**: Part of a selected **Attack Path**.
+#### Nodes
 
----
+| Visual | Meaning |
+| --- | --- |
+| `Actor` | Active component (service, agent, person). Icons show triggers: `🔄` self-trigger, `🔔` watches a datasource. |
+| `Datasource` | Passive datastore / queue / prompt state.
+| **Color accents** | Red fill = attacker, orange = victim, green outline = currently highlighted plan.
 
-#### Edge Reference
-Edges represent actions. There are two fundamental types:
-* **Direct Actions (Solid Line `───>`)**: These are actions (`read`, `write`, `comm`) that an active actor can perform at will.
-* **Conditional Actions (Dashed Line `-·-·-·>`)**: This is a special action (`resp`) that can only be performed if a precondition (an inverse `communicate` edge) is met.
+#### Edges
 
----
+| Rendering | Action semantics |
+| --- | --- |
+| Solid arrow `── write →` | Actor writes or sends poison downstream (`write`, `communicate`). |
+| Solid arrow `── read →` | Actor consumes data directly from a datasource. |
+| Dashed arrow `-·- respond ·->` | Conditional `respond` action. Requires the inverse `communicate` edge to be activated first. |
 
-#### Goal Indicators (Auto-Generated)
-These appear when a `Victim` is selected.
-* **`exploit` (Thick Red Arrow)**: Represents the final, critical action taken by the `Victim` that results in the compromise.
-* **`Assets (( ))`**: Represents the ultimate goal of the attack.
+Highlighted edges are numbered in the order the analyzer expects them to occur.
+
+#### Goal Marker
+
+When a victim is selected, the tool creates a synthetic `Assets` node. Every successful plan must finish with the victim executing an `exploit` action toward that node.
 """

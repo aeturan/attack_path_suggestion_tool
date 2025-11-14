@@ -1,3 +1,5 @@
+"""Undoable commands that mutate the in-memory graph via the UI."""
+
 from typing import Any, Dict, Literal, Optional
 
 from attack_path_suggestion_tool.domain import (
@@ -7,6 +9,8 @@ from attack_path_suggestion_tool.domain import (
 
 
 class AddNodeCommand(Command):
+    """Create an actor or datasource node with optional triggers."""
+
     def __init__(self, graph: Graph, node_data: Dict[str, Any]):
         self.graph = graph
         has_self_trigger = node_data.pop("has_self_trigger", False)
@@ -18,16 +22,18 @@ class AddNodeCommand(Command):
             for ds_id in watched_ds_ids: self.node.triggers.append(DatasourceTrigger(datasource_id=ds_id))
         else:
             self.node = Datasource(**self.node_data)
-    def execute(self): self.graph.nodes.append(self.node)
-    def undo(self): self.graph.nodes = [n for n in self.graph.nodes if n.id != self.node.id]
+    def execute(self) -> None: self.graph.nodes.append(self.node)
+    def undo(self) -> None: self.graph.nodes = [n for n in self.graph.nodes if n.id != self.node.id]
     @property
     def description(self) -> str: return f"Add {self.node.type}: '{self.node.name}'"
 
 class EditNodeCommand(Command):
+    """Update a node's display name and trigger configuration."""
+
     def __init__(self, graph: Graph, node_id: str, new_data: Dict[str, Any]):
         self.graph, self.node_id, self.new_data = graph, node_id, new_data
         self.node_before = graph.get_node(node_id).model_copy(deep=True)
-    def execute(self):
+    def execute(self) -> None:
         node = self.graph.get_node(self.node_id)
         if not node: return
         node.name = self.new_data['name']
@@ -37,7 +43,7 @@ class EditNodeCommand(Command):
             for ds_id in self.new_data.get('watches_datasources', []):
                 new_triggers.append(DatasourceTrigger(datasource_id=ds_id))
             node.triggers = new_triggers
-    def undo(self):
+    def undo(self) -> None:
         for i, n in enumerate(self.graph.nodes):
             if n.id == self.node_id: self.graph.nodes[i] = self.node_before; break
     @property
@@ -46,6 +52,8 @@ class EditNodeCommand(Command):
         return f"Edit Node: '{self.node_before.name}'"
 
 class DeleteNodeCommand(Command):
+    """Remove a node, clean up edges, and patch triggers that referenced it."""
+
     def __init__(self, graph: Graph, node_id: str):
         self.graph, self.node_id = graph, node_id
         self.node = graph.get_node(node_id)
@@ -61,7 +69,7 @@ class DeleteNodeCommand(Command):
                         triggers_to_remove = [t for t in actor.triggers if isinstance(t, DatasourceTrigger) and t.datasource_id == self.node_id]
                     if triggers_to_remove:
                         self.modified_actors_before[actor.id] = actor.model_copy(deep=True)
-    def execute(self):
+    def execute(self) -> None:
         if not self.node: return
         for actor_id in self.modified_actors_before:
             actor = self.graph.get_node(actor_id)
@@ -70,7 +78,7 @@ class DeleteNodeCommand(Command):
                 elif self.node.type == 'Datasource': actor.triggers = [t for t in actor.triggers if not (isinstance(t, DatasourceTrigger) and t.datasource_id == self.node_id)]
         self.graph.nodes = [n for n in self.graph.nodes if n.id != self.node_id]
         self.graph.edges = [e for e in self.graph.edges if e.source != self.node_id and e.target != self.node_id]
-    def undo(self):
+    def undo(self) -> None:
         if not self.node: return
         self.graph.nodes.append(self.node)
         self.graph.edges.extend(self.deleted_edges)
@@ -81,6 +89,8 @@ class DeleteNodeCommand(Command):
     def description(self) -> str: return f"Delete Node: '{self.node.name if self.node else self.node_id}'"
 
 class AddEdgeCommand(Command):
+    """Connect two nodes with a typed edge and sync triggers."""
+
     def __init__(self, graph: Graph, edge_data: Dict[str, Any]):
         self.graph = graph
         source_node, target_node, edge_type = graph.get_node(edge_data['source']), graph.get_node(edge_data['target']), edge_data['type']
@@ -94,7 +104,7 @@ class AddEdgeCommand(Command):
         self.target_actor_before: Optional[Actor] = None
         if self.edge.type in ["communicate", "respond"] and isinstance(target_node, Actor):
             self.target_actor_before = target_node.model_copy(deep=True)
-    def execute(self):
+    def execute(self) -> None:
         if self.graph.get_edge(self.edge.source, self.edge.target): return 
         self.graph.edges.append(self.edge)
         if self.target_actor_before:
@@ -102,7 +112,7 @@ class AddEdgeCommand(Command):
             if isinstance(target_node, Actor):
                 trigger = CommunicationTrigger(source_actor_id=self.edge.source, edge_type=self.edge.type)
                 if trigger not in target_node.triggers: target_node.triggers.append(trigger)
-    def undo(self):
+    def undo(self) -> None:
         self.graph.edges = [e for e in self.graph.edges if not (e.source == self.edge.source and e.target == self.edge.target)]
         if self.target_actor_before:
             for i, n in enumerate(self.graph.nodes):
@@ -113,16 +123,20 @@ class AddEdgeCommand(Command):
         return f"Add Edge ({self.edge.type}): '{s.name}' → '{t.name}'"
 
 class CreateRespondAndActivatorCommand(Command):
+    """Convenience command that creates a respond edge and its activator."""
+
     def __init__(self, graph: Graph, respond_edge_data: Dict[str, Any], comm_edge_data: Dict[str, Any]):
         self.sub_commands = [AddEdgeCommand(graph, comm_edge_data), AddEdgeCommand(graph, respond_edge_data)]
-    def execute(self):
+    def execute(self) -> None:
         for command in self.sub_commands: command.execute()
-    def undo(self):
+    def undo(self) -> None:
         for command in reversed(self.sub_commands): command.undo()
     @property
     def description(self) -> str: return "Create `respond` edge with activator"
 
 class DeleteEdgeCommand(Command):
+    """Remove an edge and update triggers referencing its source."""
+
     def __init__(self, graph: Graph, source_id: str, target_id: str):
         self.graph, self.source_id, self.target_id = graph, source_id, target_id
         self.edge = graph.get_edge(source_id, target_id)
@@ -130,14 +144,14 @@ class DeleteEdgeCommand(Command):
         if self.edge and self.edge.type in ["communicate", "respond"]:
             target_node = graph.get_node(self.edge.target)
             if isinstance(target_node, Actor): self.target_actor_before = target_node.model_copy(deep=True)
-    def execute(self):
+    def execute(self) -> None:
         if not self.edge: return
         self.graph.edges = [e for e in self.graph.edges if not (e.source == self.source_id and e.target == self.target_id)]
         if self.target_actor_before:
             target_node = self.graph.get_node(self.edge.target)
             if isinstance(target_node, Actor):
                 target_node.triggers = [t for t in target_node.triggers if not (isinstance(t, CommunicationTrigger) and t.source_actor_id == self.source_id)]
-    def undo(self):
+    def undo(self) -> None:
         if not self.edge: return
         self.graph.edges.append(self.edge)
         if self.target_actor_before:
@@ -150,11 +164,13 @@ class DeleteEdgeCommand(Command):
         return f"Delete Edge ({self.edge.type}): '{s.name}' → '{t.name}'"
 
 class SetRoleCommand(Command):
+    """Assign the special attacker/victim roles used by the analysis engine."""
+
     def __init__(self, graph: Graph, role: Literal['attacker', 'victim'], actor_id: str):
         self.graph, self.role, self.actor_id = graph, role, actor_id
         self.previous_id: Optional[str] = getattr(self.graph, f"{role}_id")
-    def execute(self): setattr(self.graph, f"{self.role}_id", self.actor_id)
-    def undo(self): setattr(self.graph, f"{self.role}_id", self.previous_id)
+    def execute(self) -> None: setattr(self.graph, f"{self.role}_id", self.actor_id)
+    def undo(self) -> None: setattr(self.graph, f"{self.role}_id", self.previous_id)
     @property
     def description(self) -> str:
         return f"Set {self.role.capitalize()}: '{self.graph.get_node(self.actor_id).name}'"

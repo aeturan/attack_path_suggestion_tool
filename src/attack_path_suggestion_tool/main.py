@@ -11,16 +11,22 @@ from attack_path_suggestion_tool.view.results_panel import render_attack_path_re
 from attack_path_suggestion_tool.view.sidebar import render_sidebar
 
 
-def render_about_model():
+def render_about_model() -> None:
+    """Render the educational copy that explains the attack grammar."""
+
     st.markdown(ABOUT_MODEL_TEXT)
 
 
-def render_legend():
+def render_legend() -> None:
+    """Display a collapsible legend for interpreting the graph."""
+
     with st.expander("Graph Legend"):
         st.markdown(GRAPH_LEGEND_TEXT)
 
 
-def main():
+def main() -> None:
+    """Bootstrap Streamlit, hydrate session state, and render the layout."""
+
     st.set_page_config(page_title="AI Agent Red Team Workbench", layout="wide", initial_sidebar_state="expanded")
 
     if "graph" not in st.session_state: load_latest_session()

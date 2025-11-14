@@ -1,3 +1,5 @@
+"""Pathfinding strategies that explore the trigger/poison search space."""
+
 import heapq
 import itertools
 from abc import ABC, abstractmethod
@@ -31,6 +33,8 @@ def _get_newly_activated_channels(steps: List[AttackStep]) -> Set:
 
 
 class PathfindingStrategy(ABC):
+    """Interface for algorithms that produce attack plans."""
+
     @abstractmethod
     def find_paths(
         self,
@@ -38,15 +42,18 @@ class PathfindingStrategy(ABC):
         num_paths: int,
         max_cost: int,
     ) -> List[AttackPlan]:
-        pass
+        """Return up to ``num_paths`` plans that cost ``<= max_cost``."""
 
 class StrategicPlannerStrategy(PathfindingStrategy):
+    """Heuristic A*-style planner that balances triggers vs. poison hops."""
+
     def find_paths(
         self,
         graph_analysis: "GraphAnalysis",
         num_paths: int,
         max_cost: int,
     ) -> List[AttackPlan]:
+        """Perform an A* search that uses poison distances as an admissible heuristic."""
 
         attacker_id = graph_analysis.graph.attacker_id
         victim_id = graph_analysis.graph.victim_id
