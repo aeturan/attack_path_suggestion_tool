@@ -102,6 +102,8 @@ class AddEdgeCommand(Command):
         if err: raise ValueError(f"{err} (Attempted: {source_node.type} → {target_node.type})")
         self.edge = Edge(**edge_data)
         self.target_actor_before: Optional[Actor] = None
+        self.source_name_snapshot = source_node.name
+        self.target_name_snapshot = target_node.name
         if self.edge.type in ["communicate", "respond"] and isinstance(target_node, Actor):
             self.target_actor_before = target_node.model_copy(deep=True)
     def execute(self) -> None:
@@ -120,7 +122,9 @@ class AddEdgeCommand(Command):
     @property
     def description(self) -> str:
         s, t = self.graph.get_node(self.edge.source), self.graph.get_node(self.edge.target)
-        return f"Add Edge ({self.edge.type}): '{s.name}' → '{t.name}'"
+        source_name = s.name if s else (self.source_name_snapshot or self.edge.source)
+        target_name = t.name if t else (self.target_name_snapshot or self.edge.target)
+        return f"Add Edge ({self.edge.type}): '{source_name}' → '{target_name}'"
 
 class CreateRespondAndActivatorCommand(Command):
     """Convenience command that creates a respond edge and its activator."""
@@ -141,6 +145,10 @@ class DeleteEdgeCommand(Command):
         self.graph, self.source_id, self.target_id = graph, source_id, target_id
         self.edge = graph.get_edge(source_id, target_id)
         self.target_actor_before: Optional[Actor] = None
+        source_node = graph.get_node(source_id)
+        target_node = graph.get_node(target_id)
+        self.source_name_snapshot = source_node.name if source_node else source_id
+        self.target_name_snapshot = target_node.name if target_node else target_id
         if self.edge and self.edge.type in ["communicate", "respond"]:
             target_node = graph.get_node(self.edge.target)
             if isinstance(target_node, Actor): self.target_actor_before = target_node.model_copy(deep=True)
@@ -161,7 +169,9 @@ class DeleteEdgeCommand(Command):
     def description(self) -> str:
         if not self.edge: return "Delete Edge: (edge not found)"
         s, t = self.graph.get_node(self.edge.source), self.graph.get_node(self.edge.target)
-        return f"Delete Edge ({self.edge.type}): '{s.name}' → '{t.name}'"
+        source_name = s.name if s else (self.source_name_snapshot or self.edge.source)
+        target_name = t.name if t else (self.target_name_snapshot or self.edge.target)
+        return f"Delete Edge ({self.edge.type}): '{source_name}' → '{target_name}'"
 
 class SetRoleCommand(Command):
     """Assign the special attacker/victim roles used by the analysis engine."""
@@ -169,8 +179,12 @@ class SetRoleCommand(Command):
     def __init__(self, graph: Graph, role: Literal['attacker', 'victim'], actor_id: str):
         self.graph, self.role, self.actor_id = graph, role, actor_id
         self.previous_id: Optional[str] = getattr(self.graph, f"{role}_id")
+        actor = self.graph.get_node(actor_id)
+        self.actor_name_snapshot = actor.name if actor else actor_id
     def execute(self) -> None: setattr(self.graph, f"{self.role}_id", self.actor_id)
     def undo(self) -> None: setattr(self.graph, f"{self.role}_id", self.previous_id)
     @property
     def description(self) -> str:
-        return f"Set {self.role.capitalize()}: '{self.graph.get_node(self.actor_id).name}'"
+        actor = self.graph.get_node(self.actor_id)
+        actor_name = actor.name if actor else self.actor_name_snapshot
+        return f"Set {self.role.capitalize()}: '{actor_name}'"
