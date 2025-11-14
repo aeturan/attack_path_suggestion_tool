@@ -1,4 +1,5 @@
 import pytest
+
 from attack_path_suggestion_tool.analysis.engine import GraphAnalysis
 from attack_path_suggestion_tool.domain import (
     Actor,
@@ -9,6 +10,7 @@ from attack_path_suggestion_tool.domain import (
     Graph,
     SelfTrigger,
 )
+
 
 @pytest.fixture
 def setup_graph_analysis():

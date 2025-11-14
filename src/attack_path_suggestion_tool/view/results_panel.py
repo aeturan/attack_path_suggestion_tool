@@ -1,7 +1,13 @@
 from typing import List, Set
+
 import streamlit as st
 
-from attack_path_suggestion_tool.domain import AttackStep, Actor, DatasourceTrigger, Graph
+from attack_path_suggestion_tool.domain import (
+    Actor,
+    AttackStep,
+    DatasourceTrigger,
+    Graph,
+)
 from attack_path_suggestion_tool.view.graph_renderer import GraphRenderer
 
 

@@ -1,4 +1,15 @@
-from attack_path_suggestion_tool.domain import Action, AttackStep, AttackPlan
+from attack_path_suggestion_tool.domain import (
+    Action,
+    Actor,
+    AttackPlan,
+    AttackStep,
+    Datasource,
+    DatasourceTrigger,
+    Edge,
+    Graph,
+    SelfTrigger,
+)
+
 
 def test_attack_plan_structure():
     # Create a dummy AttackStep
@@ -16,14 +27,7 @@ def test_attack_plan_structure():
     assert isinstance(plan.steps[0], AttackStep)
     assert plan.steps[0].cost == 1
     assert plan.steps[0].summary == "Test step"
-from attack_path_suggestion_tool.domain import (
-    Actor,
-    Datasource,
-    DatasourceTrigger,
-    Edge,
-    Graph,
-    SelfTrigger,
-)
+
 
 def test_graph_get_node_and_edge():
     actor = Actor(id="actor_1", name="Actor 1")

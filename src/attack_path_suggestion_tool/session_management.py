@@ -4,9 +4,9 @@ import json
 
 import streamlit as st
 
-from attack_path_suggestion_tool.domain import CommandHistory, Graph
-from attack_path_suggestion_tool.config import APP_CONFIG
 from attack_path_suggestion_tool.analysis.engine import clear_cached_data
+from attack_path_suggestion_tool.config import APP_CONFIG
+from attack_path_suggestion_tool.domain import CommandHistory, Graph
 
 SESSIONS_DIR = APP_CONFIG.storage.sessions_dir
 

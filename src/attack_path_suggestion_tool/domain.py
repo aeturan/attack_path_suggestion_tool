@@ -2,10 +2,9 @@
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import List, Literal, Optional, Union, Tuple, Set, TypeAlias
+from typing import List, Literal, Optional, Set, Tuple, TypeAlias, Union
 
-from pydantic import BaseModel, Field, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, Field
 
 # Core action/edge semantics typed once to keep string literals consistent.
 EdgeType: TypeAlias = Literal["read", "write", "communicate", "respond"]

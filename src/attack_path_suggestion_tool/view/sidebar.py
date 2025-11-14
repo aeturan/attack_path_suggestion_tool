@@ -1,22 +1,34 @@
 # view/sidebar.py
 import uuid
+
 import streamlit as st
 from pydantic import ValidationError
 
-from attack_path_suggestion_tool.analysis.engine import find_attack_paths_cached, clear_cached_data
+from attack_path_suggestion_tool.analysis.engine import (
+    clear_cached_data,
+    find_attack_paths_cached,
+)
 from attack_path_suggestion_tool.analysis.pathfinding import StrategicPlannerStrategy
 from attack_path_suggestion_tool.config import APP_CONFIG
-from attack_path_suggestion_tool.domain import Actor, SelfTrigger, DatasourceTrigger
+from attack_path_suggestion_tool.domain import Actor, DatasourceTrigger, SelfTrigger
 from attack_path_suggestion_tool.session_management import (
-    create_new_session, delete_current_session, get_all_sessions,
-    load_session_by_id, save_current_session
+    create_new_session,
+    delete_current_session,
+    get_all_sessions,
+    load_session_by_id,
+    save_current_session,
 )
 from attack_path_suggestion_tool.ui_commands import (
-    AddEdgeCommand, AddNodeCommand, CreateRespondAndActivatorCommand,
-    DeleteEdgeCommand, DeleteNodeCommand, EditNodeCommand, SetRoleCommand
+    AddEdgeCommand,
+    AddNodeCommand,
+    CreateRespondAndActivatorCommand,
+    DeleteEdgeCommand,
+    DeleteNodeCommand,
+    EditNodeCommand,
+    SetRoleCommand,
 )
-from attack_path_suggestion_tool.view.helpers import execute_command
 from attack_path_suggestion_tool.view.content import ABOUT_MODEL_TEXT
+from attack_path_suggestion_tool.view.helpers import execute_command
 
 
 def render_sidebar():

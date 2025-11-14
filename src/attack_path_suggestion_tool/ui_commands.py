@@ -3,8 +3,14 @@
 from typing import Any, Dict, Literal, Optional
 
 from attack_path_suggestion_tool.domain import (
-    Actor, Command, CommunicationTrigger, Datasource, DatasourceTrigger,
-    Edge, Graph, SelfTrigger
+    Actor,
+    Command,
+    CommunicationTrigger,
+    Datasource,
+    DatasourceTrigger,
+    Edge,
+    Graph,
+    SelfTrigger,
 )
 
 

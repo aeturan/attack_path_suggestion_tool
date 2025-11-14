@@ -1,8 +1,15 @@
-from attack_path_suggestion_tool.domain import (
-    Action, AttackStep, TriggerChain,
-    Actor, CommunicationTrigger, Datasource, DatasourceTrigger, Edge, Graph, SelfTrigger
-)
 from attack_path_suggestion_tool.analysis.engine import GraphAnalysis
+from attack_path_suggestion_tool.domain import (
+    Action,
+    Actor,
+    AttackStep,
+    Datasource,
+    DatasourceTrigger,
+    Edge,
+    Graph,
+    TriggerChain,
+)
+
 
 def test_trigger_chain_flattening():
     # Create nested trigger chains with AttackStep (no Attempt)
