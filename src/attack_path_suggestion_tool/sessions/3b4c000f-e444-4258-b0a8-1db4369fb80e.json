@@ -35,6 +35,16 @@
       ]
     },
     {
+      "id": "email_storage_7893",
+      "name": "email storage",
+      "type": "Datasource"
+    },
+    {
+      "id": "Long-term_memory_cc01",
+      "name": "Long-term memory",
+      "type": "Datasource"
+    },
+    {
       "id": "email_tool_826e",
       "name": "email tool",
       "type": "Actor",
@@ -45,16 +55,6 @@
           "edge_type": "communicate"
         }
       ]
-    },
-    {
-      "id": "email_storage_7893",
-      "name": "email storage",
-      "type": "Datasource"
-    },
-    {
-      "id": "Long-term_memory_cc01",
-      "name": "Long-term memory",
-      "type": "Datasource"
     }
   ],
   "edges": [
@@ -62,16 +62,6 @@
       "source": "car_agent_abe4",
       "target": "attacker_0236",
       "type": "communicate"
-    },
-    {
-      "source": "car_agent_abe4",
-      "target": "email_tool_826e",
-      "type": "communicate"
-    },
-    {
-      "source": "email_storage_7893",
-      "target": "email_tool_826e",
-      "type": "read"
     },
     {
       "source": "attacker_0236",
@@ -91,6 +81,16 @@
     {
       "source": "Long-term_memory_cc01",
       "target": "car_agent_abe4",
+      "type": "read"
+    },
+    {
+      "source": "car_agent_abe4",
+      "target": "email_tool_826e",
+      "type": "communicate"
+    },
+    {
+      "source": "email_storage_7893",
+      "target": "email_tool_826e",
       "type": "read"
     },
     {
