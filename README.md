@@ -5,7 +5,7 @@ The workbench is an interactive Streamlit application for reasoning about comple
 ## Highlights
 
 - **Visual graph builder** – Add actors/datasources, wire `read`/`write`/`communicate`/`respond` edges, and annotate triggers directly in the UI.
-- **Formal path analysis** – The engine separates poison propagation (data) from trigger activation (control), then merges them into readable attack plans.
+- **Formal path analysis** – The engine separates poison propagation from trigger activation, then merges them into readable attack plans.
 - **Undo/redo everywhere** – Every edit is an undoable command, so you can explore “what-if” scenarios safely.
 - **Session persistence** – Graphs are saved as JSON in `src/attack_path_suggestion_tool/sessions/`, making it easy to version or share them.
 - **Documented architecture** – See `docs/architecture.md` for module responsibilities and data flow.
@@ -22,7 +22,7 @@ The workbench is an interactive Streamlit application for reasoning about comple
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/<you>/attack_path_suggestion_tool.git
+git clone https://github.com/erkantare07/attack_path_suggestion_tool.git
 cd attack_path_suggestion_tool
 ```
 
@@ -97,8 +97,3 @@ Application defaults live in `config.py` and can be overridden via environment v
 - `README.md` (this file) – quick start + ops notes.
 - `docs/architecture.md` – system design, domain models, and extension guide.
 - `src/attack_path_suggestion_tool/view/content.py` – in-app explanation of the attack grammar and legend.
-
-## Contributing
-
-Issues and pull requests are welcome. Please run the test suite and lint your changes before submitting.
-
