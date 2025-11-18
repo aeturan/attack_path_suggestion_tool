@@ -81,7 +81,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
 
         # A* search loop
         while pq and len(found_plans) < num_paths:
-            _, g_cost, plan, last_compromised_actor_id, compromised_state_fs = heapq.heappop(pq)[1:]
+            _, g_cost, plan, last_compromised_actor_id, compromised_state_fs = heapq.heappop(pq)[1:] # min heap
             compromised_edges_by_actor = dict(compromised_state_fs)
 
             # Explicitly create a new set to ensure the type is correctly inferred by linters.
@@ -114,7 +114,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     compromise_edge = (actor_id, target_id)
                     
                     used_edges = compromised_edges_by_actor.get(target_id, frozenset())
-                    if compromise_edge in used_edges: continue
+                    # if compromise_edge in used_edges: continue
 
                     step = AttackStep(
                         push_poison_action=push_action,
@@ -146,7 +146,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                 if original_edge and original_edge.type in ["communicate", "respond"]:
                     compromise_edge = (actor_id, target_id)
                     used_edges = compromised_edges_by_actor.get(target_id, frozenset())
-                    if compromise_edge in used_edges: continue
+                    # if compromise_edge in used_edges: continue
 
                     push_action = Action(source_id=actor_id, edge_type=original_edge.type, target_id=target_id)
                     edge_trigger = None
@@ -198,7 +198,7 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     
                     compromise_edge = (read_edge.source, read_edge.target)
                     used_edges = compromised_edges_by_actor.get(target_id, frozenset())
-                    if compromise_edge in used_edges: continue
+                    # if compromise_edge in used_edges: continue
                     
                     datasource_id = read_edge.source
                     best_trigger = None
