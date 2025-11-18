@@ -154,11 +154,13 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     if original_edge.type == "respond":
                         activation_key = (actor_id, target_id)
                         if activation_key not in current_channels:
-                            best_activator = graph_analysis.find_cheapest_trigger_chain(
-                                potential_source_ids=set(compromised_edges_by_actor.keys()),
-                                target_id=target_id,
-                                active_channels=current_channels
-                            )
+                            best_activator = None
+                            if attacker_id:
+                                best_activator = graph_analysis.find_cheapest_trigger_chain(
+                                    potential_source_ids={attacker_id},
+                                    target_id=target_id,
+                                    active_channels=current_channels
+                                )
                             
                             if best_activator:
                                 final_activator_trigger = best_activator.model_copy(deep=True)
@@ -199,11 +201,13 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     if compromise_edge in used_edges: continue
                     
                     datasource_id = read_edge.source
-                    best_trigger = graph_analysis.find_cheapest_trigger_chain(
-                        potential_source_ids=set(compromised_edges_by_actor.keys()),
-                        target_id=target_id,
-                        active_channels=current_channels
-                    )
+                    best_trigger = None
+                    if attacker_id:
+                        best_trigger = graph_analysis.find_cheapest_trigger_chain(
+                            potential_source_ids={attacker_id},
+                            target_id=target_id,
+                            active_channels=current_channels
+                        )
                     
                     if best_trigger is None: continue
 
