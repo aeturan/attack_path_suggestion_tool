@@ -1,8 +1,6 @@
 """Graph analysis utilities for attack path planning."""
 from collections import deque
 
-import streamlit as st
-
 from attack_path_suggestion_tool.analysis.pathfinding import PathfindingStrategy
 from attack_path_suggestion_tool.domain import (
     Action,
@@ -15,18 +13,6 @@ from attack_path_suggestion_tool.domain import (
     SelfTrigger,
     TriggerChain,
 )
-
-
-def clear_cached_data() -> None:
-    """Clear all Streamlit caches.
-
-    This is called whenever the active graph/session changes so that
-    expensive cached computations (like pathfinding results) are
-    recomputed for the new state instead of leaking stale results
-    between sessions.
-    """
-    st.cache_data.clear()
-    st.cache_resource.clear()
 
 
 class GraphAnalysis:
@@ -214,16 +200,3 @@ class GraphAnalysis:
         if not self.graph.attacker_id or not self.graph.victim_id:
             return []
         return strategy.find_paths(self, num_paths, max_cost)
-
-
-@st.cache_data(hash_funcs={GraphAnalysis: lambda g: g.graph.model_dump_json()})
-def find_attack_paths_cached(
-    _graph: Graph,
-    _strategy: PathfindingStrategy,
-    num_paths: int,
-    max_cost: int,
-) -> list[AttackPlan]:
-    """Cached wrapper around :meth:`GraphAnalysis.find_attack_paths`."""
-
-    analysis_engine = GraphAnalysis(_graph)
-    return analysis_engine.find_attack_paths(_strategy, num_paths, max_cost)

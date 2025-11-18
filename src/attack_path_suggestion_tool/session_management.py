@@ -4,7 +4,6 @@ import json
 
 import streamlit as st
 
-from attack_path_suggestion_tool.analysis.engine import clear_cached_data
 from attack_path_suggestion_tool.config import APP_CONFIG
 from attack_path_suggestion_tool.domain import CommandHistory, Graph
 
@@ -38,7 +37,6 @@ def save_current_session() -> None:
 def load_session_by_id(session_id: str) -> None:
     """Load a previously saved graph by ID and reset transient state."""
 
-    clear_cached_data()
     file_path = SESSIONS_DIR / f"{session_id}.json"
     if file_path.exists():
         with open(file_path, "r", encoding="utf-8") as file_handle:
@@ -63,7 +61,6 @@ def load_latest_session() -> None:
 def create_new_session(name: str) -> None:
     """Start a brand-new graph with the provided display ``name``."""
 
-    clear_cached_data()
     st.session_state.graph = Graph(name=name)
     st.session_state.history = CommandHistory()
     st.session_state.attack_paths, st.session_state.selected_path_index = [], None

@@ -4,10 +4,7 @@ import uuid
 import streamlit as st
 from pydantic import ValidationError
 
-from attack_path_suggestion_tool.analysis.engine import (
-    clear_cached_data,
-    find_attack_paths_cached,
-)
+from attack_path_suggestion_tool.analysis.engine import GraphAnalysis
 from attack_path_suggestion_tool.analysis.pathfinding import StrategicPlannerStrategy
 from attack_path_suggestion_tool.config import APP_CONFIG
 from attack_path_suggestion_tool.domain import Actor, DatasourceTrigger, SelfTrigger
@@ -49,7 +46,6 @@ def render_sidebar():
             format_func=lambda s_id: session_names.get(s_id, "Unknown"), index=None, placeholder="Select a graph to load...")
         if selected_session and selected_session != st.session_state.graph.id:
             st.session_state.confirming_delete = False
-            clear_cached_data()
             load_session_by_id(selected_session)
             st.rerun()
 
@@ -58,7 +54,6 @@ def render_sidebar():
             if st.form_submit_button("Create New Graph"):
                 if new_graph_name:
                     st.session_state.confirming_delete = False
-                    clear_cached_data()
                     create_new_session(new_graph_name)
                     st.rerun()
                 else: st.warning("Please provide a name.")
@@ -86,14 +81,12 @@ def render_sidebar():
         if c1.button("Undo", use_container_width=True, disabled=not st.session_state.history.undo_stack):
             st.session_state.history.undo()
             save_current_session()
-            clear_cached_data()
             st.session_state.attack_paths = []
             st.session_state.selected_path_index = None
             st.rerun()
         if c2.button("Redo", use_container_width=True, disabled=not st.session_state.history.redo_stack):
             st.session_state.history.redo()
             save_current_session()
-            clear_cached_data()
             st.session_state.attack_paths = []
             st.session_state.selected_path_index = None
             st.rerun()
@@ -251,7 +244,8 @@ def render_analysis_controls():
     if st.button("Generate Attack Plans", type="primary", use_container_width=True,
         disabled=not (st.session_state.graph.attacker_id and st.session_state.graph.victim_id)):
         with st.spinner("Analyzing graph..."):
-            plans = find_attack_paths_cached(st.session_state.graph, StrategicPlannerStrategy(), num_paths, max_cost)
+            analysis_engine = GraphAnalysis(st.session_state.graph)
+            plans = analysis_engine.find_attack_paths(StrategicPlannerStrategy(), num_paths, max_cost)
             st.session_state.attack_paths, st.session_state.selected_path_index = plans, 0 if plans else None; st.rerun()
 
 def render_about_model():
