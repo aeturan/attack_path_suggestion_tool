@@ -167,7 +167,7 @@ def _render_attack_steps(
                     if action.edge_type == 'write':
                         read_source = get_name_func(action.target_id)
                         read_target = get_name_func(step.target_actor_id)
-                        st.caption(f"Auto-trigger: {read_target} watches {read_source} and is triggered automatically when it is written.")
+                        # st.caption(f"Auto-trigger: {read_target} watches {read_source} and is triggered automatically when it is written.")
                     # Also detect self-trigger inside consumption steps
                     consumption_types = {s.push_poison_action.edge_type for s in step.consumption_trigger.steps}
                     if 'self_trigger' in consumption_types:
