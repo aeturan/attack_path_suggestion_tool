@@ -101,14 +101,16 @@ class GraphAnalysis:
         for idx in range(len(path) - 1):
             source_step_id = path[idx]
             target_step_id = path[idx + 1]
+            
+            inferred_kind = self._infer_trigger_kind(source_step_id, target_step_id)
             edge = self.graph.get_edge(source_step_id, target_step_id)
 
-            if edge:
+            if inferred_kind in ("datasource", "self_trigger"):
+                edge_type = inferred_kind
+            elif edge:
                 edge_type = edge.type
-            elif source_step_id == target_step_id:
-                edge_type = "self_trigger"
             else:
-                edge_type = self._infer_trigger_kind(source_step_id, target_step_id)
+                edge_type = inferred_kind # "trigger"
 
             action = Action(source_id=source_step_id, edge_type=edge_type, target_id=target_step_id)
             steps.append(

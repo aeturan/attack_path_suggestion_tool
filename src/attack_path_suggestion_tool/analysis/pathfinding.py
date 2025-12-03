@@ -141,7 +141,6 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     continue
 
                 original_edge = graph_analysis.graph.get_edge(actor_id, target_id)
-                new_step: AttackStep | None = None
                 
                 if original_edge and original_edge.type in ["communicate", "respond"]:
                     compromise_edge = (actor_id, target_id)
@@ -151,6 +150,8 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     push_action = Action(source_id=actor_id, edge_type=original_edge.type, target_id=target_id)
                     edge_trigger = None
                     activation_cost = 0
+                    valid_comm_step = True
+
                     if original_edge.type == "respond":
                         activation_key = (actor_id, target_id)
                         if activation_key not in current_channels:
@@ -177,25 +178,46 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                                 edge_trigger = final_activator_trigger
                                 activation_cost = final_activator_trigger.cost
                             else:
-                                continue
+                                valid_comm_step = False
                     
-                    step_cost = 1 + activation_cost
-                    new_step = AttackStep(
-                        push_poison_action=push_action,
-                        target_actor_id=target_id,
-                        compromise_edge=compromise_edge,
-                        edge_activation_trigger=edge_trigger,
-                        cost=step_cost,
-                        summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via direct communication."
-                    )
+                    if valid_comm_step:
+                        step_cost = 1 + activation_cost
+                        comm_step = AttackStep(
+                            push_poison_action=push_action,
+                            target_actor_id=target_id,
+                            compromise_edge=compromise_edge,
+                            edge_activation_trigger=edge_trigger,
+                            cost=step_cost,
+                            summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via direct communication."
+                        )
 
-                    new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
-                    new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
+                        new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
+                        new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
 
-                else: # This is a write/read hop
-                    read_edge = next((r for r in graph_analysis.graph.edges if r.type == "read" and r.target == target_id and any(w.source == actor_id and w.target == r.source for w in graph_analysis.graph.edges if w.type == "write")), None)
-                    if not read_edge: continue
-                    
+                        new_g_cost = g_cost + comm_step.cost
+
+                        newly_activated = _get_newly_activated_channels([comm_step])
+                        updated_channels = current_channels.union(newly_activated)
+
+                        if original_edge.type == 'respond':
+                            activation_key_to_consume = (actor_id, target_id)
+                            updated_channels.discard(activation_key_to_consume)
+
+                        new_plan = AttackPlan(
+                            steps=plan.steps + [comm_step],
+                            total_cost=new_g_cost,
+                            active_channels=updated_channels
+                        )
+                        
+                        h_cost = heuristic_map.get(target_id, fallback_heuristic)
+                        f_cost = new_g_cost + h_cost
+
+                        new_compromised_state_fs = frozenset(new_compromised_edges_by_actor.items())
+                        heapq.heappush(pq, (f_cost, next(tie_breaker), new_g_cost, new_plan, target_id, new_compromised_state_fs))
+
+                # Check for datasource write/read hop
+                read_edge = next((r for r in graph_analysis.graph.edges if r.type == "read" and r.target == target_id and any(w.source == actor_id and w.target == r.source for w in graph_analysis.graph.edges if w.type == "write")), None)
+                if read_edge:
                     compromise_edge = (read_edge.source, read_edge.target)
                     used_edges = compromised_edges_by_actor.get(target_id, frozenset())
                     # if compromise_edge in used_edges: continue
@@ -204,58 +226,52 @@ class StrategicPlannerStrategy(PathfindingStrategy):
                     best_trigger = None
                     if attacker_id:
                         best_trigger = graph_analysis.find_cheapest_trigger_chain(
-                            potential_source_ids={attacker_id},
+                            potential_source_ids={attacker_id, actor_id},
                             target_id=target_id,
                             active_channels=current_channels
                         )
                     
-                    if best_trigger is None: continue
+                    if best_trigger:
+                        final_trigger = best_trigger.model_copy(deep=True)
+                        read_action = Action(source_id=datasource_id, edge_type='read', target_id=target_id)
+                        read_step = AttackStep(
+                            push_poison_action=read_action,
+                            target_actor_id=target_id,
+                            compromise_edge=compromise_edge,
+                            cost=1,
+                            summary=f"{graph_analysis.graph.get_node(target_id).name} reads from datasource '{graph_analysis.graph.get_node(datasource_id).name}'."
+                        )
+                        final_trigger.steps.append(read_step)
+                        final_trigger.cost += 1
 
-                    final_trigger = best_trigger.model_copy(deep=True)
-                    read_action = Action(source_id=datasource_id, edge_type='read', target_id=target_id)
-                    read_step = AttackStep(
-                        push_poison_action=read_action,
-                        target_actor_id=target_id,
-                        compromise_edge=compromise_edge,
-                        cost=1,
-                        summary=f"{graph_analysis.graph.get_node(target_id).name} reads from datasource '{graph_analysis.graph.get_node(datasource_id).name}'."
-                    )
-                    final_trigger.steps.append(read_step)
-                    final_trigger.cost += 1
+                        write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
+                        ds_step = AttackStep(
+                            push_poison_action=write_action,
+                            target_actor_id=target_id,
+                            compromise_edge=compromise_edge,
+                            consumption_trigger=final_trigger,
+                            cost=1 + final_trigger.cost,
+                            summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via Datasource '{graph_analysis.graph.get_node(datasource_id).name}'."
+                        )
+                        
+                        new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
+                        new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
 
-                    write_action = Action(source_id=actor_id, edge_type="write", target_id=datasource_id)
-                    new_step = AttackStep(
-                        push_poison_action=write_action,
-                        target_actor_id=target_id,
-                        compromise_edge=compromise_edge,
-                        consumption_trigger=final_trigger,
-                        cost=1 + final_trigger.cost,
-                        summary=f"Compromise '{graph_analysis.graph.get_node(target_id).name}' via Datasource '{graph_analysis.graph.get_node(datasource_id).name}'."
-                    )
-                    
-                    new_compromised_edges_by_actor = compromised_edges_by_actor.copy()
-                    new_compromised_edges_by_actor[target_id] = used_edges.union({compromise_edge})
+                        new_g_cost = g_cost + ds_step.cost
 
-                if new_step:
-                    new_g_cost = g_cost + new_step.cost
+                        newly_activated = _get_newly_activated_channels([ds_step])
+                        updated_channels = current_channels.union(newly_activated)
 
-                    newly_activated = _get_newly_activated_channels([new_step])
-                    updated_channels = current_channels.union(newly_activated)
+                        new_plan = AttackPlan(
+                            steps=plan.steps + [ds_step],
+                            total_cost=new_g_cost,
+                            active_channels=updated_channels
+                        )
+                        
+                        h_cost = heuristic_map.get(target_id, fallback_heuristic)
+                        f_cost = new_g_cost + h_cost
 
-                    if original_edge and original_edge.type == 'respond':
-                        activation_key_to_consume = (actor_id, target_id)
-                        updated_channels.discard(activation_key_to_consume)
-
-                    new_plan = AttackPlan(
-                        steps=plan.steps + [new_step],
-                        total_cost=new_g_cost,
-                        active_channels=updated_channels
-                    )
-                    
-                    h_cost = heuristic_map.get(target_id, fallback_heuristic)
-                    f_cost = new_g_cost + h_cost
-
-                    new_compromised_state_fs = frozenset(new_compromised_edges_by_actor.items())
-                    heapq.heappush(pq, (f_cost, next(tie_breaker), new_g_cost, new_plan, target_id, new_compromised_state_fs))
+                        new_compromised_state_fs = frozenset(new_compromised_edges_by_actor.items())
+                        heapq.heappush(pq, (f_cost, next(tie_breaker), new_g_cost, new_plan, target_id, new_compromised_state_fs))
 
         return sorted(found_plans, key=lambda p: p.total_cost)
