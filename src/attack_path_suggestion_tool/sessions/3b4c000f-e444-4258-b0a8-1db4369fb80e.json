@@ -1,6 +1,6 @@
 {
   "id": "3b4c000f-e444-4258-b0a8-1db4369fb80e",
-  "name": "in-car agent",
+  "name": "Sample In-Car Agent",
   "nodes": [
     {
       "id": "car_agent_abe4",
@@ -35,11 +35,6 @@
       ]
     },
     {
-      "id": "email_storage_7893",
-      "name": "email storage",
-      "type": "Datasource"
-    },
-    {
       "id": "Long-term_memory_cc01",
       "name": "Long-term memory",
       "type": "Datasource"
@@ -55,6 +50,11 @@
           "edge_type": "communicate"
         }
       ]
+    },
+    {
+      "id": "email_storage_7893",
+      "name": "email storage",
+      "type": "Datasource"
     }
   ],
   "edges": [
@@ -62,11 +62,6 @@
       "source": "car_agent_abe4",
       "target": "attacker_0236",
       "type": "communicate"
-    },
-    {
-      "source": "attacker_0236",
-      "target": "email_storage_7893",
-      "type": "write"
     },
     {
       "source": "attacker_0236",
@@ -89,14 +84,19 @@
       "type": "communicate"
     },
     {
-      "source": "email_storage_7893",
-      "target": "email_tool_826e",
-      "type": "read"
-    },
-    {
       "source": "email_tool_826e",
       "target": "car_agent_abe4",
       "type": "respond"
+    },
+    {
+      "source": "attacker_0236",
+      "target": "email_storage_7893",
+      "type": "write"
+    },
+    {
+      "source": "email_storage_7893",
+      "target": "email_tool_826e",
+      "type": "read"
     }
   ],
   "attacker_id": "attacker_0236",

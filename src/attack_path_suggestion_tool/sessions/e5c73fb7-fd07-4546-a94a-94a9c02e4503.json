@@ -1,0 +1,96 @@
+{
+  "id": "e5c73fb7-fd07-4546-a94a-94a9c02e4503",
+  "name": "Human Driver Poisoning",
+  "nodes": [
+    {
+      "id": "attacker_629b",
+      "name": "attacker",
+      "type": "Actor",
+      "triggers": [
+        {
+          "type": "communication",
+          "source_actor_id": "car_agent_ff99",
+          "edge_type": "communicate"
+        }
+      ]
+    },
+    {
+      "id": "human_driver_f91c",
+      "name": "human driver",
+      "type": "Actor",
+      "triggers": [
+        {
+          "type": "self"
+        },
+        {
+          "type": "datasource",
+          "datasource_id": "infotainment_screen_e76d"
+        },
+        {
+          "type": "communication",
+          "source_actor_id": "car_agent_ff99",
+          "edge_type": "communicate"
+        }
+      ]
+    },
+    {
+      "id": "car_agent_ff99",
+      "name": "car agent",
+      "type": "Actor",
+      "triggers": [
+        {
+          "type": "self"
+        },
+        {
+          "type": "communication",
+          "source_actor_id": "attacker_629b",
+          "edge_type": "communicate"
+        },
+        {
+          "type": "communication",
+          "source_actor_id": "human_driver_f91c",
+          "edge_type": "communicate"
+        }
+      ]
+    },
+    {
+      "id": "infotainment_screen_e76d",
+      "name": "infotainment screen",
+      "type": "Datasource"
+    }
+  ],
+  "edges": [
+    {
+      "source": "car_agent_ff99",
+      "target": "attacker_629b",
+      "type": "communicate"
+    },
+    {
+      "source": "car_agent_ff99",
+      "target": "human_driver_f91c",
+      "type": "communicate"
+    },
+    {
+      "source": "car_agent_ff99",
+      "target": "infotainment_screen_e76d",
+      "type": "write"
+    },
+    {
+      "source": "attacker_629b",
+      "target": "car_agent_ff99",
+      "type": "communicate"
+    },
+    {
+      "source": "human_driver_f91c",
+      "target": "car_agent_ff99",
+      "type": "communicate"
+    },
+    {
+      "source": "infotainment_screen_e76d",
+      "target": "human_driver_f91c",
+      "type": "read"
+    }
+  ],
+  "attacker_id": "attacker_629b",
+  "victim_id": "car_agent_ff99"
+}
