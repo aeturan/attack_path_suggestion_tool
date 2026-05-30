@@ -1,5 +1,7 @@
 # 🛡️ AI Agent Red Team Workbench
 
+**Check the paper:** [Agent2Agent Threats in Safety-Critical LLM Assistants: A Human-Centric Taxonomy](https://arxiv.org/abs/2602.05877)
+
 The workbench is an interactive Streamlit application for reasoning about complex AI-agent ecosystems. Model your system as a graph, specify how components trigger each other, and let the analysis engine discover non-obvious attack paths from an attacker-controlled actor to the victim’s critical assets.
 
 ## Highlights
